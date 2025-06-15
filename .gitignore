@@ -1,0 +1,26 @@
+# Ignorar archivos generados por Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignorar entornos virtuales
+venv/
+.env/
+
+# Ignorar archivos de configuración de IDEs como VS Code
+.vscode/
+.idea/
+
+# Ignorar archivos de base de datos SQLite
+*.sqlite3
+
+# Ignorar archivos de migraciones
+migrations/
+
+# Ignorar archivos de configuración de Docker
+docker-compose.override.yml
+
+#ignorar .env
+.env
+
+mysql/mysql-data
