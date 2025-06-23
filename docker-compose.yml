@@ -1,0 +1,36 @@
+services:
+  postgres:
+    container_name: ally360-postgres
+    image: postgres:15
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres/postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro  # para inicializar la base de datos
+      # - ./postgres/custom.conf:/etc/postgresql/postgresql.conf      # para configuraciones personalizadas
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+  api:
+    depends_on:
+      - postgres
+    container_name: ally360-api
+    image: ally360-api
+    build:
+      context: ./
+      dockerfile: docker/debugger.Dockerfile
+    ports:
+      - "8000:8000"
+      - "5678:5678"
+    volumes:
+      - ./app:/code/app
+    tty: true
+    env_file:
+      - .env
+    environment:
+      - DEBUG=true
