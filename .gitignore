@@ -23,4 +23,7 @@ docker-compose.override.yml
 #ignorar .env
 .env
 
+# Ignorar archivos de postgres y mysql
+postgres/postgres-data
+
 mysql/mysql-data

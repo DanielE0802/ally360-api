@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 import app.modules.auth.models as models
-from app.database.database import engine
+from app.database.database import engine, Base
 from app.modules.auth.models import User, Profile
-from app.modules.auth.router import auth_router
+from app.modules.auth.router import auth_router, company_router
 from modules.inventory.router import product_router, category_router
 
 app = FastAPI(title="Ally360 API",
@@ -15,10 +15,13 @@ app = FastAPI(title="Ally360 API",
              }
            )
 
+
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(company_router, prefix="/company", tags=["Companies"])
 app.include_router(product_router, prefix="/inventory", tags=["Products"])
 app.include_router(category_router, prefix="/inventory", tags=["Categories"])
 
+Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 async def read_root():

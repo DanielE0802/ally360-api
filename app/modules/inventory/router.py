@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, status, Path 
+from fastapi import APIRouter, HTTPException, status, Path
 from app.modules.inventory.models import Product, Category
-from app.dependencies.dbDependecies import db_dependency
 from app.modules.inventory.schemas import ProductCreate, ProductUpdate
+from app.dependencies.dbDependecies import db_dependency
+from app.dependencies.userDependencies import user_dependency
+from app.modules.auth.models import User
 from uuid import UUID
 
 product_router = APIRouter()
@@ -9,23 +11,24 @@ category_router = APIRouter()
 
 
 @product_router.get("/products")
-async def get_all_products(db: db_dependency ):
+async def get_all_products(db: db_dependency, user: User = user_dependency):
     """ Retrieve all products from the database. """
     products = db.query(Product).all()
     return {"products": products}
 
 @product_router.get("/products/{product_id}")
-async def get_product_by_id(product_id: UUID, db: db_dependency):
+async def get_product_by_id(product_id: UUID, db: db_dependency, user: User = user_dependency):
     """ Retrieve a product by its ID. """
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Produc not found')
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Product not found')
     return {"product": product}
 
 @product_router.post("/product")
 async def create_product(
     product: ProductCreate,
-    db: db_dependency
+    db: db_dependency,
+    user: User = user_dependency
 ):
     existing_product = db.query(Product).filter(Product.name == product.name).first()
     if existing_product:
