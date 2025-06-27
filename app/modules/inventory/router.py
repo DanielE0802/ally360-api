@@ -1,25 +1,28 @@
-from fastapi import APIRouter, HTTPException, status, Path
+from fastapi import APIRouter, HTTPException, status, Path, Depends
 from app.modules.inventory.models import Product, Category
 from app.modules.inventory.schemas import ProductCreate, ProductUpdate
 from app.dependencies.dbDependecies import db_dependency
 from app.dependencies.userDependencies import user_dependency
 from app.modules.auth.models import User
 from uuid import UUID
+from app.modules.company.utils import get_current_user_and_company
 
 product_router = APIRouter()
 category_router = APIRouter()
 
 
 @product_router.get("/products")
-async def get_all_products(db: db_dependency, user: User = user_dependency):
+async def get_all_products(db: db_dependency, current: dict = Depends(get_current_user_and_company)):
     """ Retrieve all products from the database. """
-    products = db.query(Product).all()
+    company_id = current.get("company_id")
+    products = db.query(Product).filter(Product.company_id == company_id).all()
     return {"products": products}
 
 @product_router.get("/products/{product_id}")
-async def get_product_by_id(product_id: UUID, db: db_dependency, user: User = user_dependency):
+async def get_product_by_id(product_id: UUID, db: db_dependency, current: dict = Depends(get_current_user_and_company)):
     """ Retrieve a product by its ID. """
-    product = db.query(Product).filter(Product.id == product_id).first()
+    company_id = current.get("company_id")
+    product = db.query(Product).filter(Product.id == product_id, Product.company_id == company_id).first()
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Product not found')
     return {"product": product}
@@ -28,9 +31,10 @@ async def get_product_by_id(product_id: UUID, db: db_dependency, user: User = us
 async def create_product(
     product: ProductCreate,
     db: db_dependency,
-    user: User = user_dependency
+    current: dict = Depends(get_current_user_and_company)
 ):
-    existing_product = db.query(Product).filter(Product.name == product.name).first()
+    company_id = current.get("company_id")
+    existing_product = db.query(Product).filter(Product.name == product.name, Product.company_id == company_id).first()
     if existing_product:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -62,9 +66,11 @@ async def patch_product(
     return {"product": product}
 
 @product_router.delete("/product/{product_id}")
-async def delete_product(product_id: UUID, db: db_dependency):
+async def delete_product(product_id: UUID, db: db_dependency,
+                         current: dict = Depends(get_current_user_and_company)):
     """ Delete a product by its ID. """
-    product = db.query(Product).filter(Product.id == product_id).first()
+    company_id = current.get("company_id")
+    product = db.query(Product).filter(Product.id == product_id, Product.company_id == company_id).first()
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Product not found')
     

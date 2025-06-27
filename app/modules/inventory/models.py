@@ -15,7 +15,7 @@ class Product(Base):
     quantity = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    owner_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
 
 class Category(Base):
     __tablename__ = "categories"

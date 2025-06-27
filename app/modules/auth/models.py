@@ -1,5 +1,5 @@
 from app.database.database import Base
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import UUID
@@ -42,21 +42,3 @@ class UserCompany(Base):
     user = relationship("User", back_populates="companies")
     company = relationship("Company", back_populates="users")
     
-
-class Company(Base):
-    __tablename__ = "companies"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
-    name = Column(String, unique=True, index=True)
-    description = Column(String, nullable=True)
-    address = Column(String, nullable=True)
-    phone_number = Column(String, unique=True, index=True)
-    nit = Column(String(50), unique=True, nullable=False)
-    social_reason = Column(String, nullable=True)
-    logo = Column(String, nullable=True)
-    quantity_employees = Column(Integer, default=0)
-    economic_activity = Column(String, nullable=True)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    users = relationship("UserCompany", back_populates="company")

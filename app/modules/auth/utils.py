@@ -8,8 +8,9 @@ from app.core.config import settings
 from fastapi.security import OAuth2PasswordBearer
 from app.modules.auth.models import User
 from app.dependencies.dbDependecies import db_dependency
+from fastapi.security import HTTPBearer
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = HTTPBearer()
 
 SECRET_KEY = settings.APP_SECRET_STRING
 ALGORITHM = settings.ALGORITHM
@@ -58,7 +59,7 @@ def verify_token(token: str):
         raise HTTPException(status_code=403, detail=f"Token verification failed: {str(e)}")
 
 
-def get_current_user(db: db_dependency, token: str = Depends(oauth2_scheme)) -> User:
+def get_current_user(db: db_dependency, token: HTTPBearer = Depends(oauth2_scheme)) -> User:
     """ Retrieve the current user based on the provided JWT token. """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -67,7 +68,7 @@ def get_current_user(db: db_dependency, token: str = Depends(oauth2_scheme)) -> 
     )
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
