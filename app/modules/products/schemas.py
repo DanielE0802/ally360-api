@@ -24,19 +24,19 @@ class ProductOutDefault(ProductCreate):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ProductOutWithPdvs(ProductOutDefault):
     pdvs: list[UUID] = Field(default_factory=list, description="List of PDV IDs where the product is available")
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ProductList(BaseModel):
     products: list[ProductOutDefault]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class VariantCreate(BaseModel):
     color: Optional[str]
@@ -68,7 +68,7 @@ class PDVOut(BaseModel):
     address: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class StockOut(BaseModel):
     id: UUID
@@ -76,7 +76,7 @@ class StockOut(BaseModel):
     pdv: PDVOut
 
     class Config:
-        orm_mode = True
+        from_attributes = True
         
 
 class BrandOut(BaseModel):
@@ -84,14 +84,14 @@ class BrandOut(BaseModel):
     name: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CategoryOut(BaseModel):
     id: UUID
     name: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class StockPerPDV(BaseModel):
     pdv_id: UUID
@@ -110,4 +110,4 @@ class ProductOut(BaseModel):
     pdvs: List[StockPerPDV]
 
     class Config:
-        orm_mode = True
+        from_attributes = True

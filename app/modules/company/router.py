@@ -14,7 +14,7 @@ company_router = APIRouter()
 
 @company_router.post("/", response_model=CompanyOut, status_code=status.HTTP_201_CREATED)
 async def create_company(company: CompanyCreate, db: db_dependency,
-                         current_user: User = user_dependency):
+                         current_user: user_dependency):
     """
     Endpoint to create a company.
     """
@@ -27,7 +27,7 @@ async def create_company(company: CompanyCreate, db: db_dependency,
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @company_router.get("/my_companies", response_model=list[CompanyOut], status_code=status.HTTP_200_OK)
-async def get_my_companies(db: db_dependency, current_user: User = user_dependency):
+async def get_my_companies(db: db_dependency, current_user: user_dependency):
     """
     Endpoint to get all companies for the current user.
     """
@@ -58,7 +58,7 @@ async def assign_user(
 async def select_company(
     db: db_dependency,
     company_id: UUID,
-    current_user: User = user_dependency
+    current_user: user_dependency
 ):
     """
     Select a company for the current user and return new token with company context.

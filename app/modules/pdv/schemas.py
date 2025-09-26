@@ -10,7 +10,7 @@ class PDVcreate(BaseModel):
     is_active: bool = Field(default=True, description="Indicates if the PDV is active")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class PDVOutput(PDVcreate):
     id: UUID = Field(..., description="Unique identifier of the PDV")
@@ -22,10 +22,10 @@ class PDVUpdate(BaseModel):
     is_active: Optional[bool] = Field(None, description="Indicates if the PDV is active")
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class PDVList(BaseModel):
     pdvs: list[PDVOutput] = Field(..., description="List of PDVs")
 
     class Config:
-        orm_mode = True
+        from_attributes = True

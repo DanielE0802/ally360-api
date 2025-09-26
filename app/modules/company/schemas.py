@@ -14,13 +14,13 @@ class CompanyCreate(BaseModel):
     logo: Optional[str] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CompanyOut(CompanyCreate):
     id: UUID
 
     class Config:
-        orm_mode = True
+        from_attributes = True
         
 class AssignUserToCompany(BaseModel):
     user_id: UUID

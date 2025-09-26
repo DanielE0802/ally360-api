@@ -1,0 +1,37 @@
+<!-- 
+    PLACEHOLDER - Template de invitación
+    
+    Este archivo será reemplazado por el template real.
+    
+    Variables disponibles:
+    - invitee_email: Email del invitado
+    - inviter_name: Nombre de quien invita
+    - company_name: Nombre de la empresa
+    - invitation_url: URL de aceptación con token
+    - role: Rol asignado
+    - support_email: Email de soporte
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Invitación a {{ company_name }}</title>
+</head>
+<body>
+    <h1>¡Has sido invitado!</h1>
+    
+    <p>{{ inviter_name }} te ha invitado a unirte a <strong>{{ company_name }}</strong> en Ally360.</p>
+    
+    <p>Rol asignado: <strong>{{ role }}</strong></p>
+    
+    <p>Para aceptar la invitación y crear tu cuenta, haz clic en el siguiente enlace:</p>
+    
+    <a href="{{ invitation_url }}">Aceptar invitación</a>
+    
+    <p>Esta invitación expirará en 7 días.</p>
+    
+    <p>¿Necesitas ayuda? Contáctanos en: {{ support_email }}</p>
+    
+    <p>Saludos,<br>El equipo de Ally360</p>
+</body>
+</html>

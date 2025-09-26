@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.orm import Session
 from app.modules.company.schemas import CompanyCreate, CompanyOutWithRole, AssignUserToCompany
 from app.modules.auth.utils import create_access_token
 from app.dependencies.dbDependecies import db_dependency
@@ -107,4 +108,46 @@ def select_company(db: db_dependency, company_id: UUID, current_user: User):
     })
     
     return {"access_token": token, "token_type": "bearer"}
+
+def create_tenant_company(db: Session, name: str, owner_id: UUID) -> Company:
+    """
+    Crear nueva empresa para multi-tenant con configuración completa.
+    
+    Args:
+        db: Sesión de base de datos
+        name: Nombre de la empresa
+        owner_id: ID del usuario propietario
+        
+    Returns:
+        Company: Empresa creada
+    """
+    # Verificar que no exista una empresa con el mismo nombre
+    existing_company = db.query(Company).filter(Company.name == name).first()
+    if existing_company:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ya existe una empresa con este nombre"
+        )
+    
+    # Crear la empresa
+    company = Company(
+        name=name,
+        description=f"Empresa creada para {name}",
+        is_active=True
+        # Los demás campos se pueden llenar posteriormente
+    )
+    
+    db.add(company)
+    db.flush()  # Para obtener el ID
+    
+    # Aquí podrías agregar lógica adicional de tenant:
+    # - Crear schemas específicos si usas schema-per-tenant
+    # - Configurar límites por defecto
+    # - Crear PDVs por defecto
+    # - Inicializar configuraciones base
+    
+    db.commit()
+    db.refresh(company)
+    
+    return company
 

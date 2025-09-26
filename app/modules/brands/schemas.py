@@ -18,10 +18,10 @@ class BrandOut(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class BrandList(BaseModel):
     brands: list[BrandOut]
 
     class Config:
-        orm_mode = True
+        from_attributes = True

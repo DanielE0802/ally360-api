@@ -1,0 +1,33 @@
+<!-- 
+    PLACEHOLDER - Template de verificación de email
+    
+    Este archivo será reemplazado por el template real.
+    
+    Variables disponibles:
+    - user_name: Nombre del usuario
+    - verification_url: URL de verificación con token
+    - company_name: Nombre de la empresa (opcional)
+    - support_email: Email de soporte
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Verifica tu cuenta</title>
+</head>
+<body>
+    <h1>Hola {{ user_name }}!</h1>
+    
+    <p>Gracias por registrarte en Ally360{% if company_name %} para {{ company_name }}{% endif %}.</p>
+    
+    <p>Para activar tu cuenta, haz clic en el siguiente enlace:</p>
+    
+    <a href="{{ verification_url }}">Verificar mi cuenta</a>
+    
+    <p>Si no solicitaste esta cuenta, puedes ignorar este correo.</p>
+    
+    <p>¿Necesitas ayuda? Contáctanos en: {{ support_email }}</p>
+    
+    <p>Saludos,<br>El equipo de Ally360</p>
+</body>
+</html>
