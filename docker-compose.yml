@@ -33,4 +33,4 @@ services:
     env_file:
       - .env
     environment:
-      - DEBUG=true
+      - DEBUG="true"

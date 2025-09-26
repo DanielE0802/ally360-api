@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Path, Depends
 from app.dependencies.dbDependecies import db_dependency
-from app.dependencies.companyDependencies import get_current_user_and_company
+from app.dependencies.companyDependencies import UserCompanyContext
 from app.modules.pdv.models import PDV
 from app.modules.pdv.schemas import PDVcreate, PDVUpdate, PDVOutput, PDVList
 from app.modules.pdv import service
@@ -12,7 +12,7 @@ pdv_router = APIRouter()
 async def create_pdv(
     pdv: PDVcreate,
     db: db_dependency,
-    current = get_current_user_and_company
+    current: UserCompanyContext
 ):
     """Endpoint to create a new PDV."""
     return service.create_pdv(pdv, db, current)
@@ -22,7 +22,7 @@ async def create_pdv(
 @pdv_router.get("/", response_model=PDVList)
 async def get_all_pdvs(
     db: db_dependency,
-    current = Depends(get_current_user_and_company)
+    current: UserCompanyContext
 ):
     """Endpoint to retrieve PDV information."""
     return service.get_all_pdvs(db, current)
@@ -31,7 +31,7 @@ async def get_all_pdvs(
 async def get_pdv_by_id(
     pdv_id: UUID,
     db: db_dependency,
-    current = Depends(get_current_user_and_company)
+    current: UserCompanyContext
 ):
     """Endpoint to retrieve a PDV by its ID."""
     return service.get_pdv_by_id(pdv_id, db, current)
@@ -41,7 +41,7 @@ async def update_pdv(
     pdv_id: UUID,
     pdv_update: PDVUpdate,
     db: db_dependency,
-    current = Depends(get_current_user_and_company)
+    current: UserCompanyContext
 ):
     """Endpoint to update a PDV."""
     return service.update_pdv(pdv_id, pdv_update, db, current)
@@ -50,7 +50,7 @@ async def update_pdv(
 async def delete_pdv(
     pdv_id: UUID,
     db: db_dependency,
-    current = Depends(get_current_user_and_company)
+    current: UserCompanyContext
 ):
     """Endpoint to delete a PDV."""
     return service.delete_pdv(pdv_id, db, current)
