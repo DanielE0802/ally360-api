@@ -69,32 +69,20 @@ class DebitNoteReasonType(enum.Enum):
 
 # ===== MODELOS =====
 
-class Supplier(Base, TenantMixin, TimestampMixin):
-    """
-    Proveedores de la empresa
-    
-    Maneja la información básica de proveedores para facturación,
-    órdenes de compra y notas débito.
-    """
-    __tablename__ = "suppliers"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    name = Column(String(200), nullable=False, index=True)
-    document = Column(String(50), nullable=True)  # NIT o CC
-    email = Column(String(100), nullable=True)
-    phone = Column(String(50), nullable=True)
-    address = Column(Text, nullable=True)
-
-    # Relationships
-    purchase_orders = relationship("PurchaseOrder", back_populates="supplier", cascade="all, delete-orphan")
-    bills = relationship("Bill", back_populates="supplier", cascade="all, delete-orphan")
-    debit_notes = relationship("DebitNote", back_populates="supplier", cascade="all, delete-orphan")
-
-    __table_args__ = (
-        # Documento único por empresa (si se proporciona)
-        # UniqueConstraint("company_id", "document", name="uq_supplier_company_document"),
-        TenantMixin.__table_args__
-    )
+# NOTE: Legacy Supplier model kept commented for historical reference. Bills now reference contacts.Contact instead.
+# class Supplier(Base, TenantMixin, TimestampMixin):
+#     """
+#     Proveedores de la empresa (DEPRECATED)
+#     Reemplazado por app.modules.contacts.models.Contact con type 'provider'.
+#     """
+#     __tablename__ = "suppliers"
+#     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+#     name = Column(String(200), nullable=False, index=True)
+#     document = Column(String(50), nullable=True)
+#     email = Column(String(100), nullable=True)
+#     phone = Column(String(50), nullable=True)
+#     address = Column(Text, nullable=True)
+#     __table_args__ = (TenantMixin.__table_args__,)
 
 
 class PurchaseOrder(Base, TenantMixin, TimestampMixin):
@@ -107,7 +95,8 @@ class PurchaseOrder(Base, TenantMixin, TimestampMixin):
     __tablename__ = "purchase_orders"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False, index=True)
+    # References a provider Contact (app.modules.contacts.models.Contact)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=False, index=True)
     pdv_id = Column(UUID(as_uuid=True), ForeignKey("pdvs.id"), nullable=False, index=True)
     
     issue_date = Column(Date, nullable=False, default=date.today)
@@ -123,7 +112,8 @@ class PurchaseOrder(Base, TenantMixin, TimestampMixin):
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
     # Relationships
-    supplier = relationship("Supplier", back_populates="purchase_orders")
+    # Keep attribute name 'supplier' for backwards compatibility, but now relates to Contact
+    supplier = relationship("Contact")
     pdv = relationship("PDV")
     created_by_user = relationship("User")
     items = relationship("POItem", back_populates="purchase_order", cascade="all, delete-orphan")
@@ -166,7 +156,8 @@ class Bill(Base, TenantMixin, TimestampMixin):
     __tablename__ = "bills"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False, index=True)
+    # References a provider Contact (app.modules.contacts.models.Contact)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=False, index=True)
     pdv_id = Column(UUID(as_uuid=True), ForeignKey("pdvs.id"), nullable=False, index=True)
     
     # Información de la factura
@@ -186,7 +177,8 @@ class Bill(Base, TenantMixin, TimestampMixin):
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
     # Relationships
-    supplier = relationship("Supplier", back_populates="bills")
+    # Keep attribute name 'supplier' for backwards compatibility, but now relates to Contact
+    supplier = relationship("Contact")
     pdv = relationship("PDV")
     created_by_user = relationship("User")
     line_items = relationship("BillLineItem", back_populates="bill", cascade="all, delete-orphan")
@@ -195,8 +187,7 @@ class Bill(Base, TenantMixin, TimestampMixin):
 
     __table_args__ = (
         # Número de factura único por empresa y proveedor
-        # UniqueConstraint("company_id", "supplier_id", "number", name="uq_bill_company_supplier_number"),
-        TenantMixin.__table_args__
+        # UniqueConstraint("tenant_id", "supplier_id", "number", name="uq_bill_tenant_supplier_number"),
     )
 
 
@@ -262,7 +253,8 @@ class DebitNote(Base, TenantMixin, TimestampMixin):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     bill_id = Column(UUID(as_uuid=True), ForeignKey("bills.id"), nullable=True, index=True)  # Opcional
-    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False, index=True)
+    # References a provider Contact (app.modules.contacts.models.Contact)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=False, index=True)
     
     issue_date = Column(Date, nullable=False, default=date.today)
     status = Column(Enum(DebitNoteStatus), nullable=False, default=DebitNoteStatus.OPEN, index=True)
@@ -277,7 +269,8 @@ class DebitNote(Base, TenantMixin, TimestampMixin):
 
     # Relationships
     bill = relationship("Bill", back_populates="debit_notes")
-    supplier = relationship("Supplier", back_populates="debit_notes")
+    # Keep attribute name 'supplier' for backwards compatibility, but now relates to Contact
+    supplier = relationship("Contact")
     created_by_user = relationship("User")
     items = relationship("DebitNoteItem", back_populates="debit_note", cascade="all, delete-orphan")
 

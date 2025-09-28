@@ -8,172 +8,18 @@ from uuid import UUID
 from datetime import date, datetime
 
 from app.modules.invoices.models import (
-    Invoice, InvoiceLineItem, Customer, Payment, InvoiceSequence,
+    Invoice, InvoiceLineItem, Payment, InvoiceSequence,
     InvoiceStatus, InvoiceType, PaymentMethod
 )
 from app.modules.invoices.schemas import (
-    InvoiceCreate, InvoiceUpdate, CustomerCreate, CustomerUpdate, PaymentCreate,
+    InvoiceCreate, InvoiceUpdate, PaymentCreate,
     InvoiceFilters, StockValidation, InvoiceValidation, InvoiceTaxSummary, InvoiceTotals
 )
 from app.modules.products.models import Product, Stock, InventoryMovement, ProductTax, Tax
 from app.modules.pdv.models import PDV
 
 
-class CustomerService:
-    def __init__(self, db: Session):
-        self.db = db
-
-    def create_customer(self, customer_data: CustomerCreate, company_id: str) -> Customer:
-        """Crear un nuevo cliente"""
-        try:
-            # Validar documento único si se proporciona
-            if customer_data.document:
-                existing = self.db.query(Customer).filter(
-                    Customer.tenant_id == company_id,
-                    Customer.document == customer_data.document
-                ).first()
-                
-                if existing:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail=f"Ya existe un cliente con el documento '{customer_data.document}'"
-                    )
-
-            customer = Customer(
-                **customer_data.model_dump(),
-                tenant_id=company_id
-            )
-            
-            self.db.add(customer)
-            self.db.commit()
-            self.db.refresh(customer)
-            return customer
-            
-        except IntegrityError as e:
-            self.db.rollback()
-            if "uq_customer_tenant_document" in str(e):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Ya existe un cliente con el documento '{customer_data.document}'"
-                )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error de integridad: {str(e)}"
-            )
-        except Exception as e:
-            self.db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error interno del servidor: {str(e)}"
-            )
-
-    def get_customers(self, company_id: str, limit: int = 100, offset: int = 0, search: Optional[str] = None) -> dict:
-        """Obtener lista de clientes con búsqueda opcional"""
-        try:
-            query = self.db.query(Customer).filter(Customer.tenant_id == company_id)
-            
-            if search:
-                search_filter = or_(
-                    Customer.name.ilike(f"%{search}%"),
-                    Customer.email.ilike(f"%{search}%"),
-                    Customer.document.ilike(f"%{search}%")
-                )
-                query = query.filter(search_filter)
-            
-            total = query.count()
-            customers = query.offset(offset).limit(limit).all()
-            
-            return {
-                "customers": customers,
-                "total": total,
-                "limit": limit,
-                "offset": offset
-            }
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error al obtener clientes: {str(e)}"
-            )
-
-    def get_customer_by_id(self, customer_id: UUID, company_id: str) -> Customer:
-        """Obtener cliente por ID"""
-        customer = self.db.query(Customer).filter(
-            Customer.id == customer_id,
-            Customer.tenant_id == company_id
-        ).first()
-        
-        if not customer:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Cliente no encontrado"
-            )
-        return customer
-
-    def update_customer(self, customer_id: UUID, customer_update: CustomerUpdate, company_id: str) -> Customer:
-        """Actualizar cliente"""
-        try:
-            customer = self.get_customer_by_id(customer_id, company_id)
-            
-            # Validar documento único si se está actualizando
-            if customer_update.document and customer_update.document != customer.document:
-                existing = self.db.query(Customer).filter(
-                    Customer.tenant_id == company_id,
-                    Customer.document == customer_update.document,
-                    Customer.id != customer_id
-                ).first()
-                
-                if existing:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail=f"Ya existe otro cliente con el documento '{customer_update.document}'"
-                    )
-            
-            # Actualizar campos
-            for field, value in customer_update.model_dump(exclude_unset=True).items():
-                if value is not None:
-                    setattr(customer, field, value)
-            
-            self.db.commit()
-            self.db.refresh(customer)
-            return customer
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            self.db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error interno del servidor: {str(e)}"
-            )
-
-    def delete_customer(self, customer_id: UUID, company_id: str) -> dict:
-        """Eliminar cliente si no tiene facturas"""
-        try:
-            customer = self.get_customer_by_id(customer_id, company_id)
-            
-            # Verificar si tiene facturas
-            invoice_count = self.db.query(Invoice).filter(
-                Invoice.customer_id == customer_id
-            ).count()
-            
-            if invoice_count > 0:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"No se puede eliminar el cliente porque tiene {invoice_count} factura(s) asociada(s)"
-                )
-            
-            self.db.delete(customer)
-            self.db.commit()
-            return {"message": "Cliente eliminado exitosamente"}
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            self.db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error interno del servidor: {str(e)}"
-            )
+## CustomerService removed in favor of Contacts module
 
 
 class InvoiceService:
@@ -196,14 +42,16 @@ class InvoiceService:
             if not pdv:
                 errors.append("El PDV especificado no existe o no pertenece a esta empresa")
             
-            # Validar Cliente
-            customer = self.db.query(Customer).filter(
-                Customer.id == invoice_data.customer_id,
-                Customer.tenant_id == company_id
+            # Validar Cliente (Contact con tipo client)
+            from app.modules.contacts.models import Contact
+            customer = self.db.query(Contact).filter(
+                Contact.id == invoice_data.customer_id,
+                Contact.tenant_id == company_id,
+                Contact.deleted_at.is_(None)
             ).first()
-            
-            if not customer:
-                errors.append("El cliente especificado no existe o no pertenece a esta empresa")
+
+            if not customer or (customer.type and 'client' not in customer.type):
+                errors.append("El cliente especificado no existe, no pertenece a esta empresa o no es de tipo 'client'")
             
             # Validar productos y stock
             for item in invoice_data.items:
@@ -462,7 +310,6 @@ class InvoiceService:
         """Obtener lista de facturas con filtros"""
         try:
             query = self.db.query(Invoice).options(
-                selectinload(Invoice.customer),
                 selectinload(Invoice.pdv)
             ).filter(Invoice.tenant_id == company_id)
             
@@ -511,8 +358,8 @@ class InvoiceService:
     def get_invoice_by_id(self, invoice_id: UUID, company_id: str) -> Invoice:
         """Obtener factura por ID con detalles completos"""
         invoice = self.db.query(Invoice).options(
-            selectinload(Invoice.customer),
             selectinload(Invoice.pdv),
+            selectinload(Invoice.customer),
             selectinload(Invoice.line_items),
             selectinload(Invoice.payments),
             selectinload(Invoice.created_by_user)
@@ -529,7 +376,7 @@ class InvoiceService:
         
         return invoice
 
-    def add_payment(self, invoice_id: UUID, payment_data: PaymentCreate, company_id: str) -> Payment:
+    def add_payment(self, invoice_id: UUID, payment_data: PaymentCreate, company_id: str, user_id: UUID) -> Payment:
         """Agregar pago a una factura"""
         try:
             invoice = self.get_invoice_by_id(invoice_id, company_id)
@@ -553,6 +400,7 @@ class InvoiceService:
             payment = Payment(
                 invoice_id=invoice_id,
                 tenant_id=company_id,
+                created_by=user_id,
                 **payment_data.model_dump()
             )
             
@@ -616,56 +464,7 @@ class InvoiceService:
                 detail=f"Error anulando factura: {str(e)}"
             )
 
-    def get_invoices(
-        self,
-        tenant_id: UUID,
-        limit: int = 100,
-        offset: int = 0,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-        customer_id: Optional[UUID] = None,
-        pdv_id: Optional[UUID] = None,
-        status: Optional[str] = None,
-        invoice_number: Optional[str] = None
-    ):
-        """Listar facturas con filtros"""
-        try:
-            from app.modules.invoices.schemas import InvoiceList
-            
-            query = self.db.query(Invoice).filter(Invoice.tenant_id == tenant_id)
-            
-            # Aplicar filtros
-            if start_date:
-                query = query.filter(Invoice.created_at >= start_date)
-            if end_date:
-                query = query.filter(Invoice.created_at <= end_date)
-            if customer_id:
-                query = query.filter(Invoice.customer_id == customer_id)
-            if pdv_id:
-                query = query.filter(Invoice.pdv_id == pdv_id)
-            if status:
-                query = query.filter(Invoice.status == status)
-            if invoice_number:
-                query = query.filter(Invoice.invoice_number.ilike(f"%{invoice_number}%"))
-            
-            # Contar total
-            total = query.count()
-            
-            # Aplicar paginación y ordenar
-            invoices = query.order_by(Invoice.created_at.desc()).offset(offset).limit(limit).all()
-            
-            return InvoiceList(
-                items=invoices,
-                total=total,
-                limit=limit,
-                offset=offset
-            )
-            
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error listando facturas: {str(e)}"
-            )
+    # keep single get_invoices implementation above
 
     def get_invoice_payments(self, invoice_id: UUID, tenant_id: UUID):
         """Obtener pagos de una factura"""

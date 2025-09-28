@@ -20,11 +20,10 @@ from datetime import date
 from app.database.database import get_db
 from app.modules.auth.dependencies import AuthDependencies
 from app.modules.bills.service import (
-    SupplierService, PurchaseOrderService, BillService, BillPaymentService
+    PurchaseOrderService, BillService, BillPaymentService, DebitNoteService
 )
 from app.modules.bills.schemas import (
-    # Supplier schemas
-    SupplierCreate, SupplierUpdate, SupplierOut, SupplierList,
+    # Supplier schemas (deprecated, use Contacts module instead)
     # Purchase Order schemas
     PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderOut, 
     PurchaseOrderDetail, PurchaseOrderList, PurchaseOrderStatus,
@@ -34,99 +33,22 @@ from app.modules.bills.schemas import (
     BillStatusUpdate,
     # Payment schemas
     BillPaymentCreate, BillPaymentOut, BillPaymentList,
-    # Debit Note schemas (placeholder)
-    DebitNoteCreate, DebitNoteOut, DebitNoteList
+    # Debit Note schemas
+    DebitNoteCreate, DebitNoteOut, DebitNoteList, DebitNoteDetail
 )
 
 # Router principal
 bills_router = APIRouter(prefix="/bills", tags=["Bills Module"])
 
 # Sub-routers
-suppliers_router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
+# Suppliers are managed by Contacts module (type=provider). Endpoints deprecated.
+# suppliers_router = APIRouter(prefix="/suppliers", tags=["Suppliers"]) 
 purchase_orders_router = APIRouter(prefix="/purchase-orders", tags=["Purchase Orders"])
 bill_payments_router = APIRouter(prefix="/bill-payments", tags=["Bill Payments"])
 debit_notes_router = APIRouter(prefix="/debit-notes", tags=["Debit Notes"])
 
 
-# ===== SUPPLIERS ENDPOINTS =====
-
-@suppliers_router.post("/", response_model=SupplierOut, status_code=status.HTTP_201_CREATED)
-def create_supplier(
-    supplier_data: SupplierCreate,
-    db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller"]))
-):
-    """
-    Crear un nuevo proveedor
-    
-    Solo propietarios, administradores y vendedores pueden crear proveedores.
-    El documento debe ser único por empresa si se proporciona.
-    """
-    service = SupplierService(db)
-    return service.create_supplier(supplier_data, auth_context.tenant_id)
-
-
-@suppliers_router.get("/", response_model=SupplierList)
-def list_suppliers(
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-    search: Optional[str] = Query(None, description="Buscar por nombre, documento o email"),
-    db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
-):
-    """
-    Listar proveedores con búsqueda opcional
-    
-    Permite buscar por nombre, documento o email.
-    Todos los roles pueden ver los proveedores.
-    """
-    service = SupplierService(db)
-    return service.get_suppliers(auth_context.tenant_id, limit, offset, search)
-
-
-@suppliers_router.get("/{supplier_id}", response_model=SupplierOut)
-def get_supplier(
-    supplier_id: UUID,
-    db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
-):
-    """
-    Obtener detalles de un proveedor específico
-    """
-    service = SupplierService(db)
-    return service.get_supplier_by_id(supplier_id, auth_context.tenant_id)
-
-
-@suppliers_router.patch("/{supplier_id}", response_model=SupplierOut)
-def update_supplier(
-    supplier_id: UUID,
-    supplier_update: SupplierUpdate,
-    db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller"]))
-):
-    """
-    Actualizar información de un proveedor
-    
-    Solo propietarios, administradores y vendedores pueden actualizar proveedores.
-    """
-    service = SupplierService(db)
-    return service.update_supplier(supplier_id, supplier_update, auth_context.tenant_id)
-
-
-@suppliers_router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_supplier(
-    supplier_id: UUID,
-    db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
-):
-    """
-    Eliminar un proveedor
-    
-    Solo propietarios y administradores pueden eliminar proveedores.
-    No se puede eliminar si el proveedor tiene facturas u órdenes de compra asociadas.
-    """
-    service = SupplierService(db)
-    service.delete_supplier(supplier_id, auth_context.tenant_id)
+## Suppliers endpoints are deprecated. Use /contacts and filter by provider type.
 
 
 # ===== PURCHASE ORDERS ENDPOINTS =====
@@ -165,7 +87,7 @@ def list_purchase_orders(
     """
     service = PurchaseOrderService(db)
     return service.get_purchase_orders(
-        company_id=auth_context.tenant_id,
+        tenant_id=auth_context.tenant_id,
         limit=limit,
         offset=offset,
         status=status,
@@ -216,11 +138,8 @@ def void_purchase_order(
     
     Solo propietarios y administradores pueden anular órdenes.
     """
-    # TODO: Implementar lógica de anulación
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Función de anulación no implementada aún"
-    )
+    service = PurchaseOrderService(db)
+    return service.void_purchase_order(po_id, void_data.reason, auth_context.tenant_id)
 
 
 # ===== BILLS ENDPOINTS =====
@@ -261,7 +180,7 @@ def list_bills(
     """
     service = BillService(db)
     return service.get_bills(
-        company_id=auth_context.tenant_id,
+        tenant_id=auth_context.tenant_id,
         limit=limit,
         offset=offset,
         status=status,
@@ -297,11 +216,8 @@ def update_bill(
     
     Solo se pueden actualizar facturas en estado borrador.
     """
-    # TODO: Implementar lógica de actualización
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Función de actualización no implementada aún"
-    )
+    service = BillService(db)
+    return service.update_bill(bill_id, bill_update, auth_context.tenant_id)
 
 
 @bills_router.post("/{bill_id}/void")
@@ -317,11 +233,8 @@ def void_bill(
     Solo propietarios y administradores pueden anular facturas.
     En el MVP, no se revierte el inventario automáticamente.
     """
-    # TODO: Implementar lógica de anulación
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Función de anulación no implementada aún"
-    )
+    service = BillService(db)
+    return service.void_bill(bill_id, void_data.reason, auth_context.tenant_id)
 
 
 # ===== BILL PAYMENTS ENDPOINTS =====
@@ -374,10 +287,14 @@ def list_bill_payments(
     
     Permite filtrar por factura y rango de fechas.
     """
-    # TODO: Implementar listado de pagos
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Listado de pagos no implementado aún"
+    service = BillPaymentService(db)
+    return service.list_payments(
+        tenant_id=auth_context.tenant_id,
+        limit=limit,
+        offset=offset,
+        bill_id=bill_id,
+        start_date=start_date,
+        end_date=end_date
     )
 
 
@@ -394,11 +311,8 @@ def create_debit_note(
     
     Las notas débito con ajustes de cantidad actualizan automáticamente el inventario.
     """
-    # TODO: Implementar lógica de notas débito
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Creación de notas débito no implementada aún"
-    )
+    service = DebitNoteService(db)
+    return service.create_debit_note(debit_note_data, auth_context.tenant_id, auth_context.user.id)
 
 
 @debit_notes_router.get("/", response_model=DebitNoteList)
@@ -407,21 +321,58 @@ def list_debit_notes(
     offset: int = Query(0, ge=0),
     supplier_id: Optional[UUID] = Query(None, description="Filtrar por proveedor"),
     bill_id: Optional[UUID] = Query(None, description="Filtrar por factura"),
+    start_date: Optional[date] = Query(None, description="Fecha inicial (YYYY-MM-DD)"),
+    end_date: Optional[date] = Query(None, description="Fecha final (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
 ):
     """
     Listar notas débito con filtros
     """
-    # TODO: Implementar listado de notas débito
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Listado de notas débito no implementado aún"
+    service = DebitNoteService(db)
+    return service.get_debit_notes(
+        tenant_id=auth_context.tenant_id,
+        limit=limit,
+        offset=offset,
+        supplier_id=supplier_id,
+        bill_id=bill_id,
+        start_date=start_date,
+        end_date=end_date
     )
 
 
+@debit_notes_router.get("/{debit_note_id}", response_model=DebitNoteDetail)
+def get_debit_note(
+    debit_note_id: UUID,
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
+):
+    """
+    Obtener detalles completos de una nota débito
+    """
+    service = DebitNoteService(db)
+    return service.get_debit_note_by_id(debit_note_id, auth_context.tenant_id)
+
+
+@debit_notes_router.post("/{debit_note_id}/void")
+def void_debit_note(
+    debit_note_id: UUID,
+    void_data: BillStatusUpdate,
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
+):
+    """
+    Anular una nota débito
+    
+    Solo propietarios y administradores pueden anular notas débito.
+    En el MVP, no se revierte el inventario automáticamente.
+    """
+    service = DebitNoteService(db)
+    return service.void_debit_note(debit_note_id, void_data.reason, auth_context.tenant_id)
+
+
 # Incluir todos los sub-routers en el router principal
-bills_router.include_router(suppliers_router)
+# bills_router.include_router(suppliers_router)
 bills_router.include_router(purchase_orders_router)
 bills_router.include_router(bill_payments_router)
 bills_router.include_router(debit_notes_router)

@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 from uuid import UUID
 from datetime import date, datetime
 from enum import Enum
+from app.modules.contacts.schemas import ContactForInvoice
 
 
 class InvoiceType(str, Enum):
@@ -24,7 +25,7 @@ class PaymentMethod(str, Enum):
     OTHER = "other"
 
 
-# Customer Schemas
+# Customer Schemas (deprecated: use Contacts module instead)
 class CustomerBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     email: Optional[str] = Field(None, max_length=100)
@@ -49,9 +50,6 @@ class CustomerOut(CustomerBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
     class Config:
         from_attributes = True
@@ -101,7 +99,7 @@ class InvoiceLineItemOut(BaseModel):
 # Invoice Schemas
 class InvoiceCreate(BaseModel):
     pdv_id: UUID
-    customer_id: UUID
+    customer_id: UUID  # Contact ID (type must include 'client')
     issue_date: date = Field(default_factory=date.today)
     due_date: Optional[date] = None
     notes: Optional[str] = None
@@ -159,8 +157,9 @@ class InvoiceOut(BaseModel):
 
 
 class InvoiceDetail(InvoiceOut):
-    """Esquema detallado que incluye customer, line items y payments"""
-    customer: CustomerOut
+    """Esquema detallado que incluye customer (Contact), line items y payments"""
+    # Use Contact module projection for customer details
+    customer: ContactForInvoice
     line_items: List[InvoiceLineItemOut]
     payments: List['PaymentOut'] = []
 
@@ -279,20 +278,6 @@ class CustomerList(BaseModel):
     total: int
     limit: int
     offset: int
-
-
-class InvoiceList(BaseModel):
-    items: List[InvoiceOut]
-    total: int
-    limit: int
-    offset: int
-
-
-class InvoiceUpdate(BaseModel):
-    customer_id: Optional[UUID] = None
-    due_date: Optional[date] = None
-    notes: Optional[str] = None
-    line_items: Optional[List[InvoiceLineItemCreate]] = None
 
 
 class InvoiceCancelRequest(BaseModel):

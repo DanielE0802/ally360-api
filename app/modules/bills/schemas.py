@@ -11,12 +11,13 @@ Define la validación de datos de entrada y salida para todas las entidades:
 Todas las validaciones respetan la arquitectura multi-tenant.
 """
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 from datetime import date, datetime
 from enum import Enum
+from app.modules.contacts.schemas import ContactForBill
 
 
 # ===== ENUMS =====
@@ -55,16 +56,20 @@ class DebitNoteReasonType(str, Enum):
     SERVICE = "service"
 
 
-# ===== SUPPLIER SCHEMAS =====
+# ===== SUPPLIER SCHEMAS (DEPRECATED) =====
+# DEPRECATED: Use app.modules.contacts.models.Contact with type='provider' instead
+# These schemas are kept for backward compatibility but should not be used in new code
 
 class SupplierBase(BaseModel):
+    """DEPRECATED: Use ContactForBill from contacts module instead"""
     name: str = Field(..., min_length=1, max_length=200, description="Nombre del proveedor")
     document: Optional[str] = Field(None, max_length=50, description="NIT o CC del proveedor")
     email: Optional[str] = Field(None, max_length=100, description="Email del proveedor")
     phone: Optional[str] = Field(None, max_length=50, description="Teléfono del proveedor")
     address: Optional[str] = Field(None, description="Dirección del proveedor")
 
-    @validator('email')
+    @field_validator('email')
+    @classmethod
     def validate_email(cls, v):
         if v and v.strip():
             # Validación básica de email
@@ -74,17 +79,20 @@ class SupplierBase(BaseModel):
 
 
 class SupplierCreate(SupplierBase):
+    """DEPRECATED: Use ContactCreate from contacts module instead"""
     pass
 
 
 class SupplierUpdate(BaseModel):
+    """DEPRECATED: Use ContactUpdate from contacts module instead"""
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     document: Optional[str] = Field(None, max_length=50)
     email: Optional[str] = Field(None, max_length=100)
     phone: Optional[str] = Field(None, max_length=50)
     address: Optional[str] = None
 
-    @validator('email')
+    @field_validator('email')
+    @classmethod
     def validate_email(cls, v):
         if v and v.strip():
             if '@' not in v or '.' not in v:
@@ -93,6 +101,7 @@ class SupplierUpdate(BaseModel):
 
 
 class SupplierOut(SupplierBase):
+    """DEPRECATED: Use ContactForBill from contacts module instead"""
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -102,6 +111,7 @@ class SupplierOut(SupplierBase):
 
 
 class SupplierList(BaseModel):
+    """DEPRECATED: Use contact listings from contacts module instead"""
     items: List[SupplierOut]
     total: int
     limit: int
@@ -115,7 +125,8 @@ class POItemBase(BaseModel):
     quantity: Decimal = Field(..., gt=0, description="Cantidad a ordenar")
     unit_price: Decimal = Field(..., ge=0, description="Precio unitario")
 
-    @validator('quantity', 'unit_price')
+    @field_validator('quantity', 'unit_price')
+    @classmethod
     def validate_decimals(cls, v):
         return v.quantize(Decimal('0.01'))
 
@@ -146,7 +157,8 @@ class PurchaseOrderBase(BaseModel):
 class PurchaseOrderCreate(PurchaseOrderBase):
     items: List[POItemCreate] = Field(..., min_items=1, description="Ítems de la orden")
 
-    @validator('items')
+    @field_validator('items')
+    @classmethod
     def validate_items(cls, v):
         if not v:
             raise ValueError('La orden debe tener al menos un ítem')
@@ -178,7 +190,7 @@ class PurchaseOrderOut(PurchaseOrderBase):
 
 class PurchaseOrderDetail(PurchaseOrderOut):
     items: List[POItemOut]
-    supplier: SupplierOut
+    supplier: ContactForBill
 
 
 class PurchaseOrderList(BaseModel):
@@ -195,7 +207,8 @@ class BillLineItemBase(BaseModel):
     quantity: Decimal = Field(..., gt=0, description="Cantidad")
     unit_price: Decimal = Field(..., ge=0, description="Precio unitario")
 
-    @validator('quantity', 'unit_price')
+    @field_validator('quantity', 'unit_price')
+    @classmethod
     def validate_decimals(cls, v):
         return v.quantize(Decimal('0.01'))
 
@@ -229,17 +242,18 @@ class BillCreate(BillBase):
     line_items: List[BillLineItemCreate] = Field(..., min_items=1, description="Ítems de la factura")
     status: BillStatus = Field(BillStatus.DRAFT, description="Estado inicial de la factura")
 
-    @validator('line_items')
+    @field_validator('line_items')
+    @classmethod
     def validate_items(cls, v):
         if not v:
             raise ValueError('La factura debe tener al menos un ítem')
         return v
 
-    @validator('due_date')
-    def validate_due_date(cls, v, values):
-        if v and 'issue_date' in values and v < values['issue_date']:
+    @model_validator(mode='after')
+    def validate_due_date(self):
+        if self.due_date and self.issue_date and self.due_date < self.issue_date:
             raise ValueError('La fecha de vencimiento no puede ser anterior a la fecha de emisión')
-        return v
+        return self
 
 
 class BillUpdate(BaseModel):
@@ -270,7 +284,7 @@ class BillOut(BillBase):
 
 class BillDetail(BillOut):
     line_items: List[BillLineItemOut]
-    supplier: SupplierOut
+    supplier: ContactForBill
     payments: List['BillPaymentOut'] = []
 
 
@@ -290,7 +304,8 @@ class BillPaymentBase(BaseModel):
     payment_date: date = Field(default_factory=date.today, description="Fecha del pago")
     notes: Optional[str] = Field(None, description="Notas adicionales")
 
-    @validator('amount')
+    @field_validator('amount')
+    @classmethod
     def validate_amount(cls, v):
         return v.quantize(Decimal('0.01'))
 
@@ -326,18 +341,19 @@ class DebitNoteItemBase(BaseModel):
     unit_price: Optional[Decimal] = Field(None, ge=0, description="Precio unitario (para ajustes de precio)")
     reason_type: DebitNoteReasonType = Field(..., description="Tipo de ajuste")
 
-    @validator('quantity', 'unit_price')
+    @field_validator('quantity', 'unit_price')
+    @classmethod
     def validate_decimals(cls, v):
         if v is not None:
             return v.quantize(Decimal('0.01'))
         return v
 
-    @root_validator
-    def validate_reason_requirements(cls, values):
-        reason_type = values.get('reason_type')
-        quantity = values.get('quantity')
-        unit_price = values.get('unit_price')
-        product_id = values.get('product_id')
+    @model_validator(mode='after')
+    def validate_reason_requirements(self):
+        reason_type = self.reason_type
+        quantity = self.quantity
+        unit_price = self.unit_price
+        product_id = self.product_id
 
         if reason_type == DebitNoteReasonType.QUANTITY_ADJUSTMENT:
             if not quantity:
@@ -349,7 +365,7 @@ class DebitNoteItemBase(BaseModel):
             if not unit_price:
                 raise ValueError('unit_price es requerido para ajustes de precio')
 
-        return values
+        return self
 
 
 class DebitNoteItemCreate(DebitNoteItemBase):
@@ -376,7 +392,8 @@ class DebitNoteBase(BaseModel):
 class DebitNoteCreate(DebitNoteBase):
     items: List[DebitNoteItemCreate] = Field(..., min_items=1, description="Ítems de la nota débito")
 
-    @validator('items')
+    @field_validator('items')
+    @classmethod
     def validate_items(cls, v):
         if not v:
             raise ValueError('La nota débito debe tener al menos un ítem')
@@ -407,7 +424,7 @@ class DebitNoteOut(DebitNoteBase):
 
 class DebitNoteDetail(DebitNoteOut):
     items: List[DebitNoteItemOut]
-    supplier: SupplierOut
+    supplier: ContactForBill
 
 
 class DebitNoteList(BaseModel):

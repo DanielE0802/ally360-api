@@ -9,11 +9,11 @@ import os
 
 from app.database.database import get_db
 from app.modules.auth.dependencies import AuthDependencies
-from app.modules.invoices.service import InvoiceService, CustomerService
+from app.modules.invoices.service import InvoiceService
 from app.modules.invoices.schemas import (
     InvoiceCreate, InvoiceOut, InvoiceDetail, InvoiceList, 
     PaymentCreate, PaymentOut, InvoiceEmailRequest,
-    InvoiceUpdate, InvoiceCancelRequest
+    InvoiceUpdate, InvoiceCancelRequest, InvoiceFilters, InvoiceStatus
 )
 
 invoices_router = APIRouter(prefix="/invoices", tags=["Invoices"])
@@ -43,8 +43,8 @@ def list_invoices(
     end_date: Optional[date] = Query(None, description="Fecha final (YYYY-MM-DD)"),
     customer_id: Optional[UUID] = Query(None, description="Filtrar por cliente"),
     pdv_id: Optional[UUID] = Query(None, description="Filtrar por PDV"),
-    status: Optional[str] = Query(None, description="pending, paid, cancelled"),
-    invoice_number: Optional[str] = Query(None, description="Buscar por número de factura"),
+    status: Optional[InvoiceStatus] = Query(None, description="Estado de la factura"),
+    search: Optional[str] = Query(None, description="Buscar por número o notas"),
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
 ):
@@ -55,17 +55,15 @@ def list_invoices(
     Todos los roles pueden ver las facturas.
     """
     service = InvoiceService(db)
-    return service.get_invoices(
-        tenant_id=auth_context.tenant_id,
-        limit=limit,
-        offset=offset,
-        start_date=start_date,
-        end_date=end_date,
+    filters = InvoiceFilters(
+        status=status,
         customer_id=customer_id,
         pdv_id=pdv_id,
-        status=status,
-        invoice_number=invoice_number
+        date_from=start_date,
+        date_to=end_date,
+        search=search
     )
+    return service.get_invoices(auth_context.tenant_id, filters, limit, offset)
 
 
 @invoices_router.get("/{invoice_id}", response_model=InvoiceDetail)

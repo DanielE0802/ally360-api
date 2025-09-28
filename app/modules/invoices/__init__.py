@@ -19,27 +19,24 @@ Arquitectura multi-tenant con roles y permisos:
 - viewer: Solo lectura
 
 Tablas principales:
-- customers: Clientes
 - invoices: Facturas de venta
 - invoice_line_items: Ítems de factura
 - payments: Pagos de facturas
 - invoice_sequences: Secuencias de numeración por PDV
 """
 
-from .models import Customer, Invoice, InvoiceLineItem, Payment, InvoiceSequence
+from .models import Invoice, InvoiceLineItem, Payment, InvoiceSequence
 from .schemas import (
-    CustomerCreate, CustomerOut, CustomerUpdate,
     InvoiceCreate, InvoiceOut, InvoiceDetail,
     PaymentCreate, PaymentOut
 )
-from .service import CustomerService, InvoiceService
+from .service import InvoiceService
 from .router import router
 
 __all__ = [
-    "Customer", "Invoice", "InvoiceLineItem", "Payment", "InvoiceSequence",
-    "CustomerCreate", "CustomerOut", "CustomerUpdate",
+    "Invoice", "InvoiceLineItem", "Payment", "InvoiceSequence",
     "InvoiceCreate", "InvoiceOut", "InvoiceDetail",
     "PaymentCreate", "PaymentOut",
-    "CustomerService", "InvoiceService",
+    "InvoiceService",
     "router"
 ]

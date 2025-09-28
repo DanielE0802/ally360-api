@@ -54,39 +54,37 @@ FLUJO TÍPICO:
 """
 
 from .models import (
-    Supplier, PurchaseOrder, POItem, Bill, BillLineItem, 
+    PurchaseOrder, POItem, Bill, BillLineItem, 
     BillPayment, DebitNote, DebitNoteItem,
     PurchaseOrderStatus, BillStatus, PaymentMethod, 
     DebitNoteStatus, DebitNoteReasonType
 )
 from .schemas import (
-    SupplierCreate, SupplierOut, SupplierUpdate,
     PurchaseOrderCreate, PurchaseOrderOut, PurchaseOrderDetail,
     BillCreate, BillOut, BillDetail,
     BillPaymentCreate, BillPaymentOut,
     DebitNoteCreate, DebitNoteOut, DebitNoteDetail
 )
 from .service import (
-    SupplierService, PurchaseOrderService, BillService, BillPaymentService
+    PurchaseOrderService, BillService, BillPaymentService
 )
 from .router import bills_router
 
 __all__ = [
     # Models
-    "Supplier", "PurchaseOrder", "POItem", "Bill", "BillLineItem",
+    "PurchaseOrder", "POItem", "Bill", "BillLineItem",
     "BillPayment", "DebitNote", "DebitNoteItem",
     "PurchaseOrderStatus", "BillStatus", "PaymentMethod",
     "DebitNoteStatus", "DebitNoteReasonType",
     
     # Schemas
-    "SupplierCreate", "SupplierOut", "SupplierUpdate",
     "PurchaseOrderCreate", "PurchaseOrderOut", "PurchaseOrderDetail",
     "BillCreate", "BillOut", "BillDetail",
     "BillPaymentCreate", "BillPaymentOut",
     "DebitNoteCreate", "DebitNoteOut", "DebitNoteDetail",
     
     # Services
-    "SupplierService", "PurchaseOrderService", "BillService", "BillPaymentService",
+    "PurchaseOrderService", "BillService", "BillPaymentService",
     
     # Router
     "bills_router"

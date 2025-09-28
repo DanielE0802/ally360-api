@@ -2,7 +2,25 @@
 
 ## 📄 Descripción General
 
-El módulo de **Gastos (Bills)** es un componente fundamental del ERP Ally360 que maneja toda la cadena de compras y gastos de la empresa. Desde la gestión de proveedores hasta el control de pagos, pasando por órdenes de compra y facturas con integración automática al inventario.
+El módulo de **Gastos (Bills)** es un componente fundamental del ERP Ally360 que maneja toda la cadena de compras### Seguridad y Validaciones
+
+### Multi-tenancy
+- Todas las queries filtradas por `tenant_id`
+- Validación automática de pertenencia de entidades
+- Aislamiento completo entre empresas
+
+### Validaciones de Negocio
+- **Productos y PDVs** deben pertenecer a la empresa
+- **Proveedores validados** como Contacts con tipo 'provider'
+- **Validación NIT colombiano** con dígito verificador automático
+- **Pagos no pueden exceder** el saldo pendiente
+- **Estados controlados** con transiciones válidas
+- **Facturas draft** no afectan inventario
+
+### Control de Acceso
+- **Roles jerárquicos**: owner > admin > seller > accountant > viewer
+- **Operaciones críticas** solo para owner/admin
+- **Auditoría completa** con created_by y timestampspresa. Desde la gestión de proveedores hasta el control de pagos, pasando por órdenes de compra y facturas con integración automática al inventario.
 
 ## 🏗️ Arquitectura del Sistema
 
@@ -10,9 +28,9 @@ El módulo de **Gastos (Bills)** es un componente fundamental del ERP Ally360 qu
 
 ```mermaid
 erDiagram
-    Supplier ||--o{ PurchaseOrder : "tiene"
-    Supplier ||--o{ Bill : "emite"
-    Supplier ||--o{ DebitNote : "recibe"
+    Contact ||--o{ PurchaseOrder : "proveedor"
+    Contact ||--o{ Bill : "proveedor"
+    Contact ||--o{ DebitNote : "proveedor"
     
     PurchaseOrder ||--o{ POItem : "contiene"
     Bill ||--o{ BillLineItem : "contiene"
@@ -52,12 +70,12 @@ open → void
 
 ## 🚀 Funcionalidades
 
-### 1. Gestión de Proveedores
+### 1. Gestión de Proveedores (via Contacts Module)
 
-- **CRUD completo** de proveedores
-- **Validación de documentos únicos** por empresa
+- **Integración con módulo Contacts** para proveedores unificados
+- **Validación de documentos NIT colombianos** con dígito verificador
 - **Búsqueda avanzada** por nombre, documento o email
-- **Control de eliminación** (no se puede eliminar si tiene facturas)
+- **Soft delete** con restauración (mantiene integridad referencial)
 
 ### 2. Órdenes de Compra
 
@@ -94,6 +112,17 @@ open → void
 
 ## 🔧 Integración con Otros Módulos
 
+### Módulo de Contacts
+
+```python
+# Proveedores son Contacts con type='provider'
+from app.modules.contacts.service import ContactService
+
+# Validar proveedor en Bills
+contact = ProviderValidator(db).require_provider(supplier_id, tenant_id)
+# Retorna Contact con validaciones NIT colombiano y tipo provider
+```
+
 ### Módulo de Inventario
 
 ```python
@@ -101,14 +130,14 @@ open → void
 def _update_inventory_for_bill(bill, movement_type="IN"):
     for item in bill.line_items:
         # 1. Actualizar stock
-        stock.quantity += item.quantity
+        stock.quantity += int(item.quantity)
         
         # 2. Crear movimiento
         movement = InventoryMovement(
-            type="IN",
-            quantity=item.quantity,
-            reference_type="bill",
-            reference_id=str(bill.id)
+            movement_type="IN",
+            quantity=int(item.quantity),
+            reference=str(bill.id),
+            created_by=bill.created_by
         )
 ```
 
@@ -116,9 +145,9 @@ def _update_inventory_for_bill(bill, movement_type="IN"):
 
 ```python
 # Cálculo automático de impuestos por línea
-def calculate_line_taxes(product_id, base_amount, company_id):
+def calculate_line_taxes(product_id, base_amount, tenant_id):
     # Obtiene impuestos del producto
-    # Calcula valores según legislación colombiana
+    # Calcula valores según legislación colombiana DIAN
     # Retorna: line_taxes (JSON), taxes_amount (Decimal)
 ```
 
@@ -130,15 +159,12 @@ def calculate_line_taxes(product_id, base_amount, company_id):
 
 ## 📊 API Endpoints
 
-### Proveedores (`/suppliers`)
+### Proveedores (DEPRECATED - Use Contacts Module)
 
-| Método | Endpoint | Descripción | Roles |
-|--------|----------|-------------|-------|
-| POST | `/` | Crear proveedor | owner, admin, seller |
-| GET | `/` | Listar proveedores | todos |
-| GET | `/{id}` | Ver proveedor | todos |
-| PATCH | `/{id}` | Actualizar proveedor | owner, admin, seller |
-| DELETE | `/{id}` | Eliminar proveedor | owner, admin |
+**NOTA**: Los endpoints de proveedores han sido reemplazados por el módulo de Contactos. 
+Usar `/contacts/providers/for-bills` para obtener proveedores y `/contacts/` para CRUD.
+
+Los proveedores ahora son contactos con `type=['provider']` en el módulo Contacts.
 
 ### Órdenes de Compra (`/purchase-orders`)
 
@@ -246,13 +272,18 @@ debit_note = create_debit_note({
 3. **Crear Bill open** → stock incrementa + movements IN ✓
 4. **Crear Bill draft** → no afecta stock ✓
 5. **Registrar pagos parciales/total** → saldo y estado se actualizan ✓
+6. **Update Bill (solo draft)** → revalida proveedor y recalcula totales ✓
+7. **Void PurchaseOrder/Bill** → estado cambia, notas actualizadas ✓
+8. **List Bill Payments** → filtros por tenant, factura, fechas ✓
+9. **Crear nota débito price_adjustment** → no afecta stock ✓
+10. **Crear nota débito quantity_adjustment** → stock incrementa + movement IN ✓
+11. **Listados y filtros** respetan tenant_id ✓
+12. **Integración con Contacts** → proveedores validados como type='provider' ✓
 
-### 🚧 Casos Pendientes
-6. **Bill draft→open** → stock incrementa
-7. **Nota débito price_adjustment** → no afecta stock
-8. **Nota débito quantity_adjustment** → stock incrementa + movement IN
-9. **Void Bill** → estado cambia, stock no revierte en MVP
-10. **Listados y filtros** respetan company_id
+### 🚧 Casos Pendientes (MVP Future)
+- **Bill draft→open** → stock incrementa (requiere endpoint cambio estado)
+- **Void con reversión de inventario** → para versiones post-MVP
+- **Debit Notes update/void endpoints** → funcionalidad adicional
 
 ## 🚀 Roadmap y Mejoras Futuras
 

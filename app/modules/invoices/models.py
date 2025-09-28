@@ -29,22 +29,7 @@ class PaymentMethod(enum.Enum):
     OTHER = "other"        # Otro
 
 
-class Customer(Base, TenantMixin, TimestampMixin):
-    __tablename__ = "customers"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    name = Column(String(200), nullable=False)
-    email = Column(String(100), nullable=True)
-    document = Column(String(50), nullable=True)  # NIT o CC
-    phone = Column(String(50), nullable=True)
-    address = Column(Text, nullable=True)
-    
-    # Relationships
-    invoices = relationship("Invoice", back_populates="customer")
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "document", name="uq_customer_tenant_document"),
-    )
+# Deprecated: Customer entity replaced by Contacts module
 
 
 class Invoice(Base, TenantMixin, TimestampMixin):
@@ -54,7 +39,8 @@ class Invoice(Base, TenantMixin, TimestampMixin):
     
     # References
     pdv_id = Column(UUID(as_uuid=True), ForeignKey("pdvs.id"), nullable=False)
-    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False)
+    # Keep column name customer_id for backward compatibility, but point to contacts table
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
     # Invoice data
@@ -77,7 +63,8 @@ class Invoice(Base, TenantMixin, TimestampMixin):
     
     # Relationships
     pdv = relationship("PDV")
-    customer = relationship("Customer", back_populates="invoices")
+    # Relationship to unified Contact entity (customers/providers)
+    customer = relationship("Contact")
     created_by_user = relationship("User")
     line_items = relationship("InvoiceLineItem", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
