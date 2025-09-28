@@ -4,29 +4,30 @@ from uuid import UUID
 from app.modules.brands.models import Brand
 from app.modules.brands.schemas import BrandCreate, BrandUpdate
 
-def create_brand(db: Session, brand_data: BrandCreate, company_id: UUID):
-    existing = db.query(Brand).filter_by(name=brand_data.name, company_id=company_id).first()
+def create_brand(db: Session, brand_data: BrandCreate, tenant_id: str):
+    existing = db.query(Brand).filter_by(name=brand_data.name, tenant_id=tenant_id).first()
     if existing:
         raise HTTPException(status_code=400, detail="Brand already exists in this company")
 
-    brand = Brand(**brand_data.model_dump(), company_id=company_id)
+    brand = Brand(**brand_data.model_dump(), tenant_id=tenant_id)
     db.add(brand)
     db.commit()
     db.refresh(brand)
     return brand
 
-def get_all_brands(db: Session, company_id: UUID):
-    brands = db.query(Brand).filter_by(company_id=company_id).all()
-    return {"brands": brands}
+def get_all_brands(db: Session, tenant_id: str, limit: int = 100, offset: int = 0):
+    brands = db.query(Brand).filter_by(tenant_id=tenant_id).offset(offset).limit(limit).all()
+    total = db.query(Brand).filter_by(tenant_id=tenant_id).count()
+    return {"brands": brands, "total": total, "limit": limit, "offset": offset}
 
-def get_brand_by_id(db: Session, brand_id: UUID, company_id: UUID):
-    brand = db.query(Brand).filter_by(id=brand_id, company_id=company_id).first()
+def get_brand_by_id(db: Session, brand_id: UUID, tenant_id: str):
+    brand = db.query(Brand).filter_by(id=brand_id, tenant_id=tenant_id).first()
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
     return brand
 
-def update_brand(db: Session, brand_id: UUID, update: BrandUpdate, company_id: UUID):
-    brand = db.query(Brand).filter_by(id=brand_id, company_id=company_id).first()
+def update_brand(db: Session, brand_id: UUID, update: BrandUpdate, tenant_id: str):
+    brand = db.query(Brand).filter_by(id=brand_id, tenant_id=tenant_id).first()
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
 
@@ -37,8 +38,8 @@ def update_brand(db: Session, brand_id: UUID, update: BrandUpdate, company_id: U
     db.refresh(brand)
     return brand
 
-def delete_brand(db: Session, brand_id: UUID, company_id: UUID):
-    brand = db.query(Brand).filter_by(id=brand_id, company_id=company_id).first()
+def delete_brand(db: Session, brand_id: UUID, tenant_id: str):
+    brand = db.query(Brand).filter_by(id=brand_id, tenant_id=tenant_id).first()
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
 

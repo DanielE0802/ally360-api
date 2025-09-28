@@ -17,6 +17,7 @@ from app.modules.pdv.router import pdv_router
 from app.modules.products.router import product_router
 from app.modules.brands.router import brand_router
 from app.modules.categories.router import categories_router
+from app.modules.inventory.router import stock_router, movements_router
 from app.modules.files.router_simple import router as files_router
 from app.modules.email.router import router as email_router
 
@@ -70,9 +71,11 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 app.include_router(company_router, prefix="/company", tags=["Companies"])
 app.include_router(categories_router, prefix="/categories", tags=["Categories"])
-app.include_router(pdv_router, prefix="/pdv", tags=["PDVs"])
-app.include_router(product_router, prefix="/products", tags=["Products"])
+app.include_router(pdv_router, tags=["PDVs"])
+app.include_router(product_router, tags=["Products"])
 app.include_router(brand_router, prefix="/brands", tags=["Brands"])
+app.include_router(stock_router, tags=["Inventory"])
+app.include_router(movements_router, tags=["Inventory"])
 app.include_router(files_router)
 app.include_router(email_router)
 

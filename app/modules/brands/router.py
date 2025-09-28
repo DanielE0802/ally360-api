@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, status
-from app.dependencies.dbDependecies import db_dependency
-from app.dependencies.companyDependencies import UserCompanyContext
+from fastapi import APIRouter, Depends, status, Query
+from sqlalchemy.orm import Session
+from app.database.database import get_db
+from app.modules.auth.dependencies import AuthDependencies
 from app.modules.brands import service
 from app.modules.brands.schemas import BrandCreate, BrandUpdate, BrandOut, BrandList
 from uuid import UUID
@@ -8,21 +9,43 @@ from uuid import UUID
 brand_router = APIRouter(prefix="/brands", tags=["Brands"])
 
 @brand_router.post("/", response_model=BrandOut, status_code=status.HTTP_201_CREATED)
-def create_brand(brand: BrandCreate, db: db_dependency, current: UserCompanyContext):
-    return service.create_brand(db, brand, current["company_id"])
+def create_brand(
+    brand: BrandCreate, 
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
+):
+    return service.create_brand(db, brand, auth_context.tenant_id)
 
 @brand_router.get("/", response_model=BrandList)
-def list_brands(db: db_dependency, current: UserCompanyContext):
-    return service.get_all_brands(db, current["company_id"])
+def list_brands(
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant"]))
+):
+    return service.get_all_brands(db, auth_context.tenant_id, limit, offset)
 
 @brand_router.get("/{brand_id}", response_model=BrandOut)
-def get_brand(brand_id: UUID, db: db_dependency, current: UserCompanyContext):
-    return service.get_brand_by_id(db, brand_id, current["company_id"])
+def get_brand(
+    brand_id: UUID, 
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant"]))
+):
+    return service.get_brand_by_id(db, brand_id, auth_context.tenant_id)
 
 @brand_router.patch("/{brand_id}", response_model=BrandOut)
-def update_brand(brand_id: UUID, update: BrandUpdate, db: db_dependency, current: UserCompanyContext):
-    return service.update_brand(db, brand_id, update, current["company_id"])
+def update_brand(
+    brand_id: UUID, 
+    update: BrandUpdate, 
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
+):
+    return service.update_brand(db, brand_id, update, auth_context.tenant_id)
 
 @brand_router.delete("/{brand_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_brand(brand_id: UUID, db: db_dependency, current: UserCompanyContext):
-    service.delete_brand(db, brand_id, current["company_id"])
+def delete_brand(
+    brand_id: UUID, 
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
+):
+    service.delete_brand(db, brand_id, auth_context.tenant_id)
