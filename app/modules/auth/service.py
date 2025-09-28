@@ -35,7 +35,15 @@ class AuthService:
         self.db = db
 
     def generate_secure_token(self, length: int = 32) -> str:
-        """Generar token seguro aleatorio."""
+        """
+        Generar token seguro aleatorio usando secrets module.
+        
+        Args:
+            length: Longitud del token (default: 32)
+            
+        Returns:
+            str: Token seguro alfanumérico
+        """
         alphabet = string.ascii_letters + string.digits
         return ''.join(secrets.choice(alphabet) for _ in range(length))
 
