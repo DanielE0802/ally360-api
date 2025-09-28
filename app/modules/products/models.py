@@ -99,6 +99,7 @@ class TaxType(enum.Enum):
     VAT = "VAT"  # IVA
     INC = "INC"  # INC (Impuesto Nacional al Consumo)
     WITHHOLDING = "WITHHOLDING"  # Retención
+    MUNICIPAL = "MUNICIPAL"  # Impuestos municipales (ReteICA, etc.)
     OTHER = "OTHER"  # Otros
 
 class Tax(Base, TimestampMixin):
