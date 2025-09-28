@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -34,7 +34,8 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=8)
     profile: ProfileCreate
 
-    @validator('password')
+    @field_validator('password')
+    @classmethod
     def validate_password(cls, v):
         if len(v) < 8:
             raise ValueError('La contraseña debe tener al menos 8 caracteres')
@@ -100,7 +101,8 @@ class PasswordResetConfirm(BaseModel):
     token: str
     new_password: str = Field(..., min_length=8)
 
-    @validator('new_password')
+    @field_validator('new_password')
+    @classmethod
     def validate_password(cls, v):
         if len(v) < 8:
             raise ValueError('La contraseña debe tener al menos 8 caracteres')
@@ -111,7 +113,8 @@ class CompanyInvitationCreate(BaseModel):
     email: EmailStr
     role: str = Field(..., description="Rol a asignar: owner, admin, seller, accountant, viewer")
 
-    @validator('role')
+    @field_validator('role')
+    @classmethod
     def validate_role(cls, v):
         allowed = {"owner", "admin", "seller", "accountant", "viewer"}
         if v not in allowed:
@@ -135,7 +138,8 @@ class CompanyInvitationAccept(BaseModel):
     password: str = Field(..., min_length=8)
     profile: ProfileCreate
 
-    @validator('password')
+    @field_validator('password')
+    @classmethod
     def validate_password(cls, v):
         if len(v) < 8:
             raise ValueError('La contraseña debe tener al menos 8 caracteres')

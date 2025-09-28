@@ -23,7 +23,6 @@ from app.modules.bills.service import (
     PurchaseOrderService, BillService, BillPaymentService, DebitNoteService
 )
 from app.modules.bills.schemas import (
-    # Supplier schemas (deprecated, use Contacts module instead)
     # Purchase Order schemas
     PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderOut, 
     PurchaseOrderDetail, PurchaseOrderList, PurchaseOrderStatus,
@@ -37,18 +36,13 @@ from app.modules.bills.schemas import (
     DebitNoteCreate, DebitNoteOut, DebitNoteList, DebitNoteDetail
 )
 
-# Router principal
-bills_router = APIRouter(prefix="/bills", tags=["Bills Module"])
+# Router principal para el módulo Bills
+bills_router = APIRouter(prefix="/bills")
 
-# Sub-routers
-# Suppliers are managed by Contacts module (type=provider). Endpoints deprecated.
-# suppliers_router = APIRouter(prefix="/suppliers", tags=["Suppliers"]) 
-purchase_orders_router = APIRouter(prefix="/purchase-orders", tags=["Purchase Orders"])
-bill_payments_router = APIRouter(prefix="/bill-payments", tags=["Bill Payments"])
-debit_notes_router = APIRouter(prefix="/debit-notes", tags=["Debit Notes"])
-
-
-## Suppliers endpoints are deprecated. Use /contacts and filter by provider type.
+# Sub-routers con tags consistentes bajo "Bills"
+purchase_orders_router = APIRouter(prefix="/purchase-orders", tags=["Bills"])
+bill_payments_router = APIRouter(prefix="/bill-payments", tags=["Bills"]) 
+debit_notes_router = APIRouter(prefix="/debit-notes", tags=["Bills"])
 
 
 # ===== PURCHASE ORDERS ENDPOINTS =====
@@ -144,7 +138,7 @@ def void_purchase_order(
 
 # ===== BILLS ENDPOINTS =====
 
-@bills_router.post("/", response_model=BillOut, status_code=status.HTTP_201_CREATED)
+@bills_router.post("/", response_model=BillOut, status_code=status.HTTP_201_CREATED, tags=["Bills"])
 def create_bill(
     bill_data: BillCreate,
     db: Session = Depends(get_db),
@@ -160,7 +154,7 @@ def create_bill(
     return service.create_bill(bill_data, auth_context.tenant_id, auth_context.user.id)
 
 
-@bills_router.get("/", response_model=BillList)
+@bills_router.get("/", response_model=BillList, tags=["Bills"])
 def list_bills(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -191,7 +185,7 @@ def list_bills(
     )
 
 
-@bills_router.get("/{bill_id}", response_model=BillDetail)
+@bills_router.get("/{bill_id}", response_model=BillDetail, tags=["Bills"])
 def get_bill(
     bill_id: UUID,
     db: Session = Depends(get_db),
@@ -204,7 +198,7 @@ def get_bill(
     return service.get_bill_by_id(bill_id, auth_context.tenant_id)
 
 
-@bills_router.patch("/{bill_id}", response_model=BillOut)
+@bills_router.patch("/{bill_id}", response_model=BillOut, tags=["Bills"])
 def update_bill(
     bill_id: UUID,
     bill_update: BillUpdate,
@@ -220,7 +214,7 @@ def update_bill(
     return service.update_bill(bill_id, bill_update, auth_context.tenant_id)
 
 
-@bills_router.post("/{bill_id}/void")
+@bills_router.post("/{bill_id}/void", tags=["Bills"])
 def void_bill(
     bill_id: UUID,
     void_data: BillStatusUpdate,
@@ -239,7 +233,7 @@ def void_bill(
 
 # ===== BILL PAYMENTS ENDPOINTS =====
 
-@bills_router.post("/{bill_id}/payments", response_model=BillPaymentOut, status_code=status.HTTP_201_CREATED)
+@bills_router.post("/{bill_id}/payments", response_model=BillPaymentOut, status_code=status.HTTP_201_CREATED, tags=["Bills"])
 def add_bill_payment(
     bill_id: UUID,
     payment_data: BillPaymentCreate,
@@ -256,7 +250,7 @@ def add_bill_payment(
     return service.create_payment(bill_id, payment_data, auth_context.tenant_id, auth_context.user.id)
 
 
-@bills_router.get("/{bill_id}/payments", response_model=List[BillPaymentOut])
+@bills_router.get("/{bill_id}/payments", response_model=List[BillPaymentOut], tags=["Bills"])
 def get_bill_payments(
     bill_id: UUID,
     db: Session = Depends(get_db),
@@ -372,7 +366,6 @@ def void_debit_note(
 
 
 # Incluir todos los sub-routers en el router principal
-# bills_router.include_router(suppliers_router)
 bills_router.include_router(purchase_orders_router)
 bills_router.include_router(bill_payments_router)
 bills_router.include_router(debit_notes_router)

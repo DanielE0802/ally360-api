@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from uuid import UUID
@@ -68,13 +68,15 @@ class InvoiceLineItemCreate(BaseModel):
     quantity: Decimal = Field(..., gt=0, description="Cantidad debe ser mayor a 0")
     unit_price: Decimal = Field(..., ge=0, description="Precio unitario sin impuestos")
 
-    @validator('quantity')
+    @field_validator('quantity')
+    @classmethod
     def validate_quantity(cls, v):
         if v <= 0:
             raise ValueError('La cantidad debe ser mayor a 0')
         return v
 
-    @validator('unit_price')
+    @field_validator('unit_price')
+    @classmethod
     def validate_unit_price(cls, v):
         if v < 0:
             raise ValueError('El precio unitario no puede ser negativo')
@@ -106,13 +108,14 @@ class InvoiceCreate(BaseModel):
     status: InvoiceStatus = InvoiceStatus.DRAFT
     items: List[InvoiceLineItemCreate] = Field(..., min_items=1, description="Debe incluir al menos un item")
 
-    @validator('due_date')
-    def validate_due_date(cls, v, values):
-        if v and 'issue_date' in values and v < values['issue_date']:
+    @model_validator(mode='after')
+    def validate_due_date(self):
+        if self.due_date and self.issue_date and self.due_date < self.issue_date:
             raise ValueError('La fecha de vencimiento no puede ser anterior a la fecha de emisión')
-        return v
+        return self
 
-    @validator('items')
+    @field_validator('items')
+    @classmethod
     def validate_items(cls, v):
         if not v:
             raise ValueError('Debe incluir al menos un item en la factura')
@@ -126,11 +129,11 @@ class InvoiceUpdate(BaseModel):
     notes: Optional[str] = None
     items: Optional[List[InvoiceLineItemCreate]] = None
 
-    @validator('due_date')
-    def validate_due_date(cls, v, values):
-        if v and 'issue_date' in values and values['issue_date'] and v < values['issue_date']:
+    @model_validator(mode='after')
+    def validate_due_date(self):
+        if self.due_date and self.issue_date and self.due_date < self.issue_date:
             raise ValueError('La fecha de vencimiento no puede ser anterior a la fecha de emisión')
-        return v
+        return self
 
 
 class InvoiceOut(BaseModel):
@@ -182,7 +185,8 @@ class PaymentCreate(BaseModel):
     payment_date: date = Field(default_factory=date.today)
     notes: Optional[str] = None
 
-    @validator('amount')
+    @field_validator('amount')
+    @classmethod
     def validate_amount(cls, v):
         if v <= 0:
             raise ValueError('El monto del pago debe ser mayor a 0')

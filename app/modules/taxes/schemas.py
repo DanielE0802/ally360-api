@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
@@ -19,7 +19,8 @@ class TaxBase(BaseModel):
     rate: Decimal = Field(..., ge=0, le=1, description="Tasa del impuesto (ej. 0.19 para 19%)")
     type: TaxType = Field(..., description="Tipo de impuesto")
     
-    @validator('rate')
+    @field_validator('rate')
+    @classmethod
     def validate_rate(cls, v):
         if v < 0 or v > 1:
             raise ValueError('La tasa debe estar entre 0 y 1')
@@ -38,7 +39,8 @@ class TaxUpdate(BaseModel):
     rate: Optional[Decimal] = Field(None, ge=0, le=1)
     type: Optional[TaxType] = None
     
-    @validator('rate')
+    @field_validator('rate')
+    @classmethod
     def validate_rate(cls, v):
         if v is not None and (v < 0 or v > 1):
             raise ValueError('La tasa debe estar entre 0 y 1')
