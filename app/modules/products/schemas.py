@@ -11,6 +11,7 @@ class ProductCreate(BaseModel):
     is_configurable: bool = False
     brand_id: Optional[UUID]
     category_id: Optional[UUID]
+    tax_ids: Optional[List[UUID]] = Field(default_factory=list, description="Lista de IDs de impuestos a asignar")
 
 class ProductUpdate(BaseModel):
     name: Optional[str]
@@ -18,6 +19,7 @@ class ProductUpdate(BaseModel):
     is_configurable: Optional[bool]
     brand_id: Optional[UUID]
     category_id: Optional[UUID]
+    tax_ids: Optional[List[UUID]] = Field(None, description="Lista de IDs de impuestos a asignar")
     
 class ProductOutDefault(ProductCreate):
     id: UUID
@@ -98,6 +100,23 @@ class StockPerPDV(BaseModel):
     pdv_name: str
     quantity: int
 
+class TaxOut(BaseModel):
+    id: UUID
+    name: str
+    code: str
+    rate: float
+    type: str
+
+    class Config:
+        from_attributes = True
+
+class ProductTaxOut(BaseModel):
+    id: UUID
+    tax: TaxOut
+
+    class Config:
+        from_attributes = True
+
 class ProductOut(BaseModel):
     id: UUID
     name: str
@@ -108,6 +127,7 @@ class ProductOut(BaseModel):
     category: Optional[CategoryOut]
     created_at: datetime
     pdvs: List[StockPerPDV]
+    taxes: List[ProductTaxOut] = Field(default_factory=list, description="Impuestos asignados al producto")
 
     class Config:
         from_attributes = True

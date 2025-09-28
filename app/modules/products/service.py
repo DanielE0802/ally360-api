@@ -2,13 +2,60 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from uuid import UUID
 from sqlalchemy.orm import joinedload
-from .models import Product
+from .models import Product, ProductTax, Tax
 from .schemas import ProductCreate, ProductUpdate, ConfigurableProductCreate, SimpleProductWithStockCreate, ProductOut
 from app.modules.products.models import ProductVariant, Stock
 from app.modules.brands.models import Brand
 from app.modules.categories.models import Category
 
 def create_product_with_variants(db: Session, data: ConfigurableProductCreate, tenant_id: UUID):
+    # Validar que el SKU no exista para este tenant
+    existing_product = db.query(Product).filter(
+        Product.sku == data.sku, 
+        Product.tenant_id == tenant_id
+    ).first()
+    if existing_product:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ya existe un producto con el SKU '{data.sku}' en esta empresa"
+        )
+    
+    # Validar que la marca existe y pertenece al tenant
+    brand = db.query(Brand).filter(Brand.id == data.brand_id, Brand.tenant_id == tenant_id).first()
+    if not brand:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La marca especificada no existe o no pertenece a esta empresa"
+        )
+    
+    # Validar que la categoría existe y pertenece al tenant
+    category = db.query(Category).filter(Category.id == data.category_id, Category.tenant_id == tenant_id).first()
+    if not category:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La categoría especificada no existe o no pertenece a esta empresa"
+        )
+    
+    # Validar que los SKUs de las variantes no se dupliquen
+    variant_skus = [v.sku for v in data.variants]
+    if len(variant_skus) != len(set(variant_skus)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Los SKUs de las variantes no pueden duplicarse"
+        )
+    
+    # Validar que los SKUs de las variantes no existan en otros productos de este tenant
+    for variant_data in data.variants:
+        existing_variant = db.query(ProductVariant).join(Product).filter(
+            ProductVariant.sku == variant_data.sku,
+            Product.tenant_id == tenant_id
+        ).first()
+        if existing_variant:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ya existe una variante con el SKU '{variant_data.sku}' en esta empresa"
+            )
+    
     product = Product(
         name=data.name,
         sku=data.sku,
@@ -42,13 +89,56 @@ def create_product_with_variants(db: Session, data: ConfigurableProductCreate, t
                 tenant_id=tenant_id
             ))
 
-    db.commit()
-    db.refresh(product)
-    return product
+    try:
+        db.commit()
+        db.refresh(product)
+        return product
+    except Exception as e:
+        db.rollback()
+        # Handle specific database integrity errors
+        if "uq_product_tenant_sku" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ya existe un producto con el SKU '{data.sku}' en esta empresa"
+            )
+        elif "uq_product_variant_tenant_sku" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ya existe una variante con uno de los SKUs especificados en esta empresa"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error interno del servidor: {str(e)}"
+            )
 
 def create_simple_product(db: Session, data: SimpleProductWithStockCreate, tenant_id: UUID):
-    print(f"DEBUG SERVICE: tenant_id = {tenant_id}")
-    print(f"DEBUG SERVICE: tenant_id type = {type(tenant_id)}")
+    # Validar que el SKU no exista para este tenant
+    existing_product = db.query(Product).filter(
+        Product.sku == data.sku, 
+        Product.tenant_id == tenant_id
+    ).first()
+    if existing_product:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ya existe un producto con el SKU '{data.sku}' en esta empresa"
+        )
+    
+    # Validar que la marca existe y pertenece al tenant
+    brand = db.query(Brand).filter(Brand.id == data.brand_id, Brand.tenant_id == tenant_id).first()
+    if not brand:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La marca especificada no existe o no pertenece a esta empresa"
+        )
+    
+    # Validar que la categoría existe y pertenece al tenant
+    category = db.query(Category).filter(Category.id == data.category_id, Category.tenant_id == tenant_id).first()
+    if not category:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La categoría especificada no existe o no pertenece a esta empresa"
+        )
     
     product = Product(
         name=data.name,
@@ -80,9 +170,53 @@ def create_simple_product(db: Session, data: SimpleProductWithStockCreate, tenan
             tenant_id=tenant_id
         ))
 
-    db.commit()
-    db.refresh(product)
-    return product
+    # Asignar impuestos si se proporcionan
+    if hasattr(data, 'tax_ids') and data.tax_ids:
+        # Validar que todos los impuestos existen y están disponibles para el tenant
+        taxes = db.query(Tax).filter(
+            Tax.id.in_(data.tax_ids),
+            (Tax.company_id == tenant_id) | (Tax.company_id.is_(None))
+        ).all()
+        
+        if len(taxes) != len(data.tax_ids):
+            found_ids = {tax.id for tax in taxes}
+            missing_ids = set(data.tax_ids) - found_ids
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Impuestos no encontrados: {list(missing_ids)}"
+            )
+        
+        # Crear las relaciones ProductTax
+        for tax_id in data.tax_ids:
+            product_tax = ProductTax(
+                product_id=product.id,
+                tax_id=tax_id,
+                tenant_id=tenant_id
+            )
+            db.add(product_tax)
+
+    try:
+        db.commit()
+        db.refresh(product)
+        return product
+    except Exception as e:
+        db.rollback()
+        # Handle specific database integrity errors
+        if "uq_product_tenant_sku" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ya existe un producto con el SKU '{data.sku}' en esta empresa"
+            )
+        elif "uq_product_variant_tenant_sku" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ya existe una variante con el SKU '{data.sku}' en esta empresa"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error interno del servidor: {str(e)}"
+            )
 
 def get_all_products(db: Session, tenant_id: UUID, **kwargs):
     query = db.query(Product) \

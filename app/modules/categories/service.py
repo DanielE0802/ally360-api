@@ -8,7 +8,10 @@ from app.modules.categories.schemas import CategoryCreate, CategoryUpdate
 def create_category(db: Session, data: CategoryCreate, tenant_id: str):
     exists = db.query(Category).filter_by(name=data.name, tenant_id=tenant_id).first()
     if exists:
-        raise HTTPException(status_code=400, detail="Category already exists")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Ya existe una categoría con el nombre '{data.name}' en esta empresa"
+        )
 
     category = Category(**data.model_dump(), tenant_id=tenant_id)
     db.add(category)

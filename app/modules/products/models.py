@@ -1,11 +1,12 @@
 from app.database.database import Base
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, UniqueConstraint, Numeric, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import uuid4
 from app.common.mixins import TenantMixin, TimestampMixin
+import enum
 
 class Product(Base, TenantMixin, TimestampMixin):
     __tablename__ = "products"
@@ -26,6 +27,7 @@ class Product(Base, TenantMixin, TimestampMixin):
     stocks = relationship("Stock", back_populates="product", cascade="all, delete-orphan")
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
     movements = relationship("InventoryMovement", back_populates="product")
+    product_taxes = relationship("ProductTax", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "sku", name="uq_product_tenant_sku"),
@@ -91,3 +93,64 @@ class Stock(Base, TenantMixin, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("tenant_id", "product_id", "pdv_id", "variant_id", name="uq_stock_tenant_product_pdv_variant"),
     )
+
+# Tax Type Enum
+class TaxType(enum.Enum):
+    VAT = "VAT"  # IVA
+    INC = "INC"  # INC (Impuesto Nacional al Consumo)
+    WITHHOLDING = "WITHHOLDING"  # Retención
+    OTHER = "OTHER"  # Otros
+
+class Tax(Base, TimestampMixin):
+    __tablename__ = "taxes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    name = Column(String(100), nullable=False)  # ej. "IVA 19%", "IVA 5%", "INC 8%"
+    code = Column(String(10), nullable=False)  # Código DIAN ej. "01" = IVA
+    rate = Column(Numeric(5, 4), nullable=False)  # ej. 0.1900, 0.0500
+    type = Column(Enum(TaxType), nullable=False)
+    is_editable = Column(Boolean, default=True)  # False para impuestos globales DIAN
+    
+    # Si company_id es NULL, es un impuesto global (DIAN)
+    # Si company_id tiene valor, es un impuesto local de la empresa
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)
+
+    # Relationships
+    company = relationship("Company")
+    product_taxes = relationship("ProductTax", back_populates="tax", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        # Los impuestos globales deben tener nombres únicos
+        # Los impuestos locales deben tener nombres únicos por empresa
+        UniqueConstraint("company_id", "name", name="uq_tax_company_name"),
+    )
+
+class ProductTax(Base, TenantMixin, TimestampMixin):
+    __tablename__ = "product_taxes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    tax_id = Column(UUID(as_uuid=True), ForeignKey("taxes.id"), nullable=False)
+
+    # Relationships
+    product = relationship("Product")
+    tax = relationship("Tax", back_populates="product_taxes")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "product_id", "tax_id", name="uq_product_tax_tenant_product_tax"),
+    )
+
+# Para futura integración con facturación
+class InvoiceTax(Base, TenantMixin, TimestampMixin):
+    __tablename__ = "invoice_taxes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    invoice_id = Column(UUID(as_uuid=True), nullable=False)  # FK a invoices (futuro)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    tax_id = Column(UUID(as_uuid=True), ForeignKey("taxes.id"), nullable=False)
+    base_amount = Column(Numeric(15, 2), nullable=False)  # Base gravable
+    tax_amount = Column(Numeric(15, 2), nullable=False)   # Valor del impuesto
+
+    # Relationships
+    product = relationship("Product")
+    tax = relationship("Tax")

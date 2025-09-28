@@ -157,8 +157,14 @@ class InventoryService:
         ).first()
         if not product:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El producto especificado no existe o no pertenece a esta empresa"
+            )
+        
+        if not product.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El producto '{product.name}' está inactivo y no se pueden realizar movimientos"
             )
 
         pdv = self.db.query(PDV).filter(
@@ -166,9 +172,36 @@ class InventoryService:
         ).first()
         if not pdv:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="PDV not found"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El punto de venta especificado no existe o no pertenece a esta empresa"
             )
+        
+        if not pdv.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El punto de venta '{pdv.name}' está inactivo y no se pueden realizar movimientos"
+            )
+
+        # Validate variant if provided
+        if movement_data.variant_id:
+            variant = self.db.query(ProductVariant).filter(
+                and_(
+                    ProductVariant.id == movement_data.variant_id,
+                    ProductVariant.product_id == movement_data.product_id,
+                    ProductVariant.tenant_id == tenant_id
+                )
+            ).first()
+            if not variant:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="La variante especificada no existe o no pertenece a este producto"
+                )
+            
+            if not variant.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="La variante especificada está inactiva"
+                )
 
         # Get or create stock record
         query = self.db.query(Stock).filter(
@@ -197,11 +230,28 @@ class InventoryService:
             self.db.add(stock)
             self.db.flush()
 
-        # Validate stock for OUT movements
-        if movement_data.movement_type == MovementType.OUT and stock.quantity < abs(movement_data.quantity):
+        # Validate quantity for different movement types
+        if movement_data.quantity == 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient stock. Available: {stock.quantity}, Requested: {abs(movement_data.quantity)}"
+                detail="La cantidad del movimiento no puede ser cero"
+            )
+
+        # Validate stock for OUT movements
+        if movement_data.movement_type == MovementType.OUT and stock.quantity < abs(movement_data.quantity):
+            variant_info = f" - {variant.color or ''} {variant.size or ''}".strip(' -') if movement_data.variant_id and variant else ""
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Stock insuficiente para '{product.name}{variant_info}' en '{pdv.name}'. Disponible: {stock.quantity}, Solicitado: {abs(movement_data.quantity)}"
+            )
+        
+        # Validate that final stock won't be negative
+        final_quantity = stock.quantity + movement_data.quantity
+        if final_quantity < 0:
+            variant_info = f" - {variant.color or ''} {variant.size or ''}".strip(' -') if movement_data.variant_id and variant else ""
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El movimiento resultaría en stock negativo para '{product.name}{variant_info}' en '{pdv.name}'. Stock actual: {stock.quantity}, Cambio: {movement_data.quantity}"
             )
 
         # Update stock
@@ -236,7 +286,32 @@ class InventoryService:
         if transfer_data.from_pdv_id == transfer_data.to_pdv_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot transfer to the same PDV"
+                detail="No se puede transferir al mismo punto de venta"
+            )
+        
+        if transfer_data.quantity <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La cantidad a transferir debe ser mayor a cero"
+            )
+        
+        # Validate both PDVs exist and belong to tenant
+        from_pdv = self.db.query(PDV).filter(
+            and_(PDV.tenant_id == tenant_id, PDV.id == transfer_data.from_pdv_id)
+        ).first()
+        if not from_pdv:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El punto de venta origen no existe o no pertenece a esta empresa"
+            )
+        
+        to_pdv = self.db.query(PDV).filter(
+            and_(PDV.tenant_id == tenant_id, PDV.id == transfer_data.to_pdv_id)
+        ).first()
+        if not to_pdv:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El punto de venta destino no existe o no pertenece a esta empresa"
             )
 
         # Create OUT movement from source PDV

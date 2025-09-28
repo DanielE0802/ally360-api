@@ -8,6 +8,8 @@ from app.modules.auth.schemas import AuthContext
 from app.modules.products import service
 from app.modules.products.schemas import ConfigurableProductCreate, SimpleProductWithStockCreate, ProductOut, ProductVariantOut, StockOut, ProductOutWithPdvs, ProductOutDefault
 from app.modules.inventory.service import InventoryService
+from app.modules.taxes.service import TaxService
+from app.modules.taxes.schemas import TaxCalculation
 
 product_router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -45,9 +47,6 @@ def create_simple_product(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Company context required"
         )
-    
-    print(f"DEBUG: auth_context.tenant_id = {auth_context.tenant_id}")
-    print(f"DEBUG: auth_context.tenant_id type = {type(auth_context.tenant_id)}")
     
     # Create product (stocks are created within this function)
     product = service.create_simple_product(db, data, auth_context.tenant_id)
@@ -141,3 +140,69 @@ def get_variants(
         )
     
     return service.get_variants_by_product(db, product_id, auth_context.tenant_id)
+
+
+@product_router.post("/{product_id}/taxes")
+def assign_taxes_to_product(
+    product_id: UUID,
+    tax_ids: List[UUID],
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(require_owner_or_admin())
+):
+    """
+    Asignar impuestos a un producto (owner/admin only).
+    
+    Reemplaza todos los impuestos existentes del producto con los nuevos.
+    """
+    if not auth_context.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Company context required"
+        )
+    
+    tax_service = TaxService(db)
+    return tax_service.assign_taxes_to_product(product_id, tax_ids, auth_context.tenant_id)
+
+
+@product_router.get("/{product_id}/taxes")
+def get_product_taxes(
+    product_id: UUID,
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(AuthDependencies.require_any_role())
+):
+    """
+    Obtener impuestos asignados a un producto.
+    """
+    if not auth_context.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Company context required"
+        )
+    
+    tax_service = TaxService(db)
+    return tax_service.get_product_taxes(product_id, auth_context.tenant_id)
+
+
+@product_router.post("/{product_id}/calculate-taxes", response_model=List[TaxCalculation])
+def calculate_product_taxes(
+    product_id: UUID,
+    base_amount: float = Query(..., ge=0, description="Base gravable"),
+    db: Session = Depends(get_db),
+    auth_context: AuthContext = Depends(AuthDependencies.require_any_role())
+):
+    """
+    Calcular impuestos de un producto para una base gravable específica.
+    
+    Útil para estimar impuestos antes de generar facturas.
+    """
+    if not auth_context.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Company context required"
+        )
+    
+    from decimal import Decimal
+    from app.modules.taxes.calculator import TaxCalculator
+    
+    calculator = TaxCalculator(db)
+    return calculator.calculate_product_taxes(product_id, Decimal(str(base_amount)), auth_context.tenant_id)

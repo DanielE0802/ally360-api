@@ -10,7 +10,7 @@ def create_pdv(pdv: PDVcreate, db: Session, tenant_id: str):
     if existing_pdv:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="PDV with this name already exists"
+            detail=f"Ya existe un punto de venta con el nombre '{pdv.name}' en esta empresa"
         )
 
     new_pdv = PDV(**pdv.model_dump(), tenant_id=tenant_id)

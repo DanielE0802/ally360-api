@@ -7,7 +7,10 @@ from app.modules.brands.schemas import BrandCreate, BrandUpdate
 def create_brand(db: Session, brand_data: BrandCreate, tenant_id: str):
     existing = db.query(Brand).filter_by(name=brand_data.name, tenant_id=tenant_id).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Brand already exists in this company")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Ya existe una marca con el nombre '{brand_data.name}' en esta empresa"
+        )
 
     brand = Brand(**brand_data.model_dump(), tenant_id=tenant_id)
     db.add(brand)
