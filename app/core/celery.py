@@ -23,7 +23,7 @@ celery_app = Celery(
     include=[
         "app.modules.files.tasks",
         "app.modules.products.tasks", 
-        "app.modules.auth.tasks"
+        "app.modules.email.tasks"
     ]
 )
 
@@ -50,7 +50,7 @@ celery_app.conf.update(
     task_routes={
         "app.modules.files.tasks.*": {"queue": "files"},
         "app.modules.products.tasks.*": {"queue": "products"},
-        "app.modules.auth.tasks.*": {"queue": "auth"},
+        "app.modules.email.tasks.*": {"queue": "email"},
     },
     
     # Beat schedule for periodic tasks

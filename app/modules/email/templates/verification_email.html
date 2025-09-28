@@ -1,33 +1,23 @@
-<!-- 
-    PLACEHOLDER - Template de verificación de email
-    
-    Este archivo será reemplazado por el template real.
-    
-    Variables disponibles:
-    - user_name: Nombre del usuario
-    - verification_url: URL de verificación con token
-    - company_name: Nombre de la empresa (opcional)
-    - support_email: Email de soporte
--->
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Verifica tu cuenta</title>
-</head>
-<body>
-    <h1>Hola {{ user_name }}!</h1>
-    
-    <p>Gracias por registrarte en Ally360{% if company_name %} para {{ company_name }}{% endif %}.</p>
-    
-    <p>Para activar tu cuenta, haz clic en el siguiente enlace:</p>
-    
-    <a href="{{ verification_url }}">Verificar mi cuenta</a>
-    
-    <p>Si no solicitaste esta cuenta, puedes ignorar este correo.</p>
-    
-    <p>¿Necesitas ayuda? Contáctanos en: {{ support_email }}</p>
-    
-    <p>Saludos,<br>El equipo de Ally360</p>
-</body>
-</html>
+{% extends "base_email.html" %}
+
+{% block page_title %}Verifica tu cuenta{% endblock %}
+{% block header_title %}✅ Verifica tu cuenta{% endblock %}
+
+{% block content %}
+<p class="text-primary">
+    Hola <strong>{{ user_name }}</strong>!
+</p>
+<p class="subtitle">
+    Gracias por registrarte en Ally360{% if company_name %} para <strong>{{ company_name }}</strong>{% endif %}.
+</p>
+<p class="subtitle">
+    Para activar tu cuenta, haz clic en el siguiente botón:
+</p>
+<div class="text-center" style="margin: 30px 0;">
+    <a href="{{ verification_url }}" target="_blank" class="button-primary">Verificar mi cuenta</a>
+</div>
+<p class="text-secondary">
+    Si no solicitaste esta cuenta, puedes ignorar este mensaje.
+</p>
+<p class="text-secondary">— El equipo de Ally360</p>
+{% endblock %}

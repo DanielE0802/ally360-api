@@ -21,4 +21,4 @@ class Company(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    users = relationship("UserCompany", back_populates="company")
+    user_companies = relationship("UserCompany", back_populates="company")

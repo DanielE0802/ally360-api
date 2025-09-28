@@ -12,7 +12,7 @@ from app.modules.auth.schemas import (
     EmailVerificationRequest, EmailVerificationConfirm,
     PasswordResetRequest, PasswordResetConfirm,
     CompanyInvitationCreate, CompanyInvitationOut, CompanyInvitationAccept,
-    CompanySelectionRequest, AuthContext
+    CompanySelectionRequest, AuthContext, RefreshTokenRequest
 )
 
 auth_router = APIRouter()
@@ -51,7 +51,8 @@ async def resend_verification_email(request_data: EmailVerificationRequest, db: 
     """
     Reenviar email de verificación.
     """
-    # Implementar lógica de reenvío
+    auth_service = AuthService(db)
+    auth_service.resend_verification(request_data.email)
     return {"message": "Email de verificación enviado"}
 
 @auth_router.post("/login", response_model=TokenResponse)
@@ -127,7 +128,7 @@ async def reset_password(
 @auth_router.post("/invite-user", response_model=dict)
 async def invite_user_to_company(
     invitation_data: CompanyInvitationCreate,
-    auth_context: AuthContext = Depends(require_owner_or_admin),
+    auth_context: AuthContext = Depends(require_owner_or_admin()),
     db: Session = Depends(get_db)
 ):
     """
@@ -176,8 +177,10 @@ async def accept_company_invitation(
 
 @auth_router.get("/invitations", response_model=List[CompanyInvitationOut])
 async def get_pending_invitations(
-    auth_context: AuthContext = Depends(require_owner_or_admin),
-    db: Session = Depends(get_db)
+    auth_context: AuthContext = Depends(require_owner_or_admin()),
+    db: Session = Depends(get_db),
+    limit: int = 50,
+    offset: int = 0
 ):
     """
     Obtener invitaciones pendientes de la empresa.
@@ -188,8 +191,8 @@ async def get_pending_invitations(
             detail="Se requiere seleccionar una empresa"
         )
     
-    # Implementar consulta de invitaciones
-    return []
+    auth_service = AuthService(db)
+    return auth_service.list_invitations(company_id=auth_context.tenant_id, limit=limit, offset=offset)
 
 @auth_router.post("/logout", response_model=dict)
 async def logout():
@@ -199,15 +202,12 @@ async def logout():
     return {"message": "Logout exitoso"}
 
 @auth_router.post("/refresh", response_model=TokenResponse)
-async def refresh_token():
+async def refresh_token(body: RefreshTokenRequest, db: Session = Depends(get_db)):
     """
     Renovar token de acceso con refresh token.
     """
-    # Implementar lógica de refresh
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Refresh token no implementado aún"
-    )
+    auth_service = AuthService(db)
+    return auth_service.refresh_access_token(body.refresh_token)
 
 @auth_router.get("/health")
 def auth_health():

@@ -130,10 +130,13 @@ def create_tenant_company(db: Session, name: str, owner_id: UUID) -> Company:
         )
     
     # Crear la empresa
+    from uuid import uuid4
     company = Company(
         name=name,
         description=f"Empresa creada para {name}",
-        is_active=True
+        is_active=True,
+        nit=f"NIT-{uuid4()}",
+        phone_number=None
         # Los demás campos se pueden llenar posteriormente
     )
     

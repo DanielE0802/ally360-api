@@ -39,13 +39,12 @@ Ally360 es un ERP SaaS multi-tenant construido con FastAPI, PostgreSQL y MinIO p
 
 ## Flujo de autenticación
 
-### 1. Registro de empresa
+### 1. Registro de usuario
 ```http
 POST /auth/register
 {
   "email": "owner@company.com",
   "password": "password123",
-  "company_name": "Mi Empresa",
   "profile": {
     "first_name": "Juan",
     "last_name": "Pérez",

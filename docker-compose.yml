@@ -88,7 +88,7 @@ services:
       - redis
     container_name: ally360-celery-worker
     image: ally360-api
-    command: celery -A app.core.celery worker --loglevel=info
+    command: celery -A app.core.celery worker --loglevel=info -Q email,files,products,celery
     volumes:
       - ./app:/code/app
     env_file:

@@ -40,14 +40,41 @@ class EmailService:
     def _create_smtp_connection(self):
         """Crear conexión SMTP segura."""
         try:
+            logger.info(f"Connecting to SMTP server: {self.smtp_server}:{self.smtp_port}")
+            logger.info(f"Use TLS: {self.use_tls}")
+            logger.info(f"Username: {self.username}")
+            
             if self.use_tls:
                 context = ssl.create_default_context()
                 server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+                server.ehlo()
+                logger.info("Starting TLS...")
                 server.starttls(context=context)
+                server.ehlo()
             else:
-                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
+                # If TLS is disabled, choose connection type by port:
+                # - Port 465 generally expects implicit SSL (SMTP_SSL)
+                # - Ports 25/2525/587 typically start as plain and may upgrade with STARTTLS
+                if int(self.smtp_port) == 465:
+                    logger.info("Using implicit SSL (SMTP_SSL) due to port 465...")
+                    context = ssl.create_default_context()
+                    server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port, context=context)
+                else:
+                    logger.info("Using plain SMTP without TLS (no STARTTLS)...")
+                    server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+                server.ehlo()
             
+            # SMTP low-level debug if DEBUG enabled
+            try:
+                from app.core.config import settings as _settings
+                if getattr(_settings, "DEBUG", False):
+                    server.set_debuglevel(1)
+            except Exception:
+                pass
+
+            logger.info("Authenticating...")
             server.login(self.username, self.password)
+            logger.info("SMTP connection successful!")
             return server
         except Exception as e:
             logger.error(f"Error creating SMTP connection: {str(e)}")
@@ -97,6 +124,10 @@ class EmailService:
             True si se envió correctamente, False en caso contrario
         """
         try:
+            logger.info(f"Preparing to send email to: {to_emails}")
+            logger.info(f"Subject: {subject}")
+            logger.info(f"From: {self.from_name} <{self.from_email}>")
+            
             msg = MIMEMultipart('alternative')
             msg['Subject'] = subject
             msg['From'] = f"{self.from_name} <{self.from_email}>"
@@ -104,6 +135,7 @@ class EmailService:
             
             if cc_emails:
                 msg['Cc'] = ', '.join(cc_emails)
+                logger.info(f"CC: {cc_emails}")
             
             # Add text content
             if text_content:
@@ -131,6 +163,7 @@ class EmailService:
                         msg.attach(part)
             
             # Send email
+            logger.info("Creating SMTP connection...")
             with self._create_smtp_connection() as server:
                 all_recipients = to_emails[:]
                 if cc_emails:
@@ -138,13 +171,18 @@ class EmailService:
                 if bcc_emails:
                     all_recipients.extend(bcc_emails)
                 
-                server.sendmail(self.from_email, all_recipients, msg.as_string())
+                logger.info(f"Sending email to all recipients: {all_recipients}")
+                refused = server.sendmail(self.from_email, all_recipients, msg.as_string())
+                if refused:
+                    logger.error(f"Some recipients were refused by SMTP server: {refused}")
+                    raise Exception(f"Recipients refused: {refused}")
+                logger.info("Email sent via SMTP successfully!")
             
             logger.info(f"Email sent successfully to {', '.join(to_emails)}")
             return True
             
         except Exception as e:
-            logger.error(f"Error sending email: {str(e)}")
+            logger.error(f"Error sending email: {str(e)}", exc_info=True)
             return False
     
     def send_template_email(

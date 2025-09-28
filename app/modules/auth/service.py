@@ -17,10 +17,9 @@ from app.modules.auth.schemas import (
 )
 from app.modules.auth.utils import (
     hash_password, verify_password, create_access_token, 
-    create_context_token, create_refresh_token
+    create_context_token, create_refresh_token, verify_token
 )
 from app.modules.company.models import Company
-from app.modules.company.service import create_tenant_company
 from app.modules.email.tasks import (
     send_verification_email_task, send_invitation_email_task, 
     send_password_reset_email_task
@@ -77,23 +76,7 @@ class AuthService:
         self.db.add(user)
         self.db.flush()
 
-        # Crear empresa si es propietario
-        company = None
-        if user_data.company_name:
-            company = create_tenant_company(
-                db=self.db,
-                name=user_data.company_name,
-                owner_id=user.id
-            )
-
-            # Crear relación usuario-empresa como owner
-            user_company = UserCompany(
-                user_id=user.id,
-                company_id=company.id,
-                role="owner",
-                is_active=True
-            )
-            self.db.add(user_company)
+        # Paso 1: Solo crear usuario (la empresa se crea y asocia en un paso posterior)
 
         # Generar token de verificación
         verification_token = self.generate_secure_token()
@@ -112,7 +95,7 @@ class AuthService:
             user_email=user.email,
             user_name=user.profile.first_name,
             verification_token=verification_token,
-            company_name=user_data.company_name
+            company_name=None
         )
 
         return user, verification_token
@@ -143,6 +126,44 @@ class AuthService:
 
         self.db.commit()
         return user
+
+    def resend_verification(self, email: str) -> bool:
+        """Reenviar email de verificación si el usuario aún no ha verificado."""
+        user = self.db.query(User).options(selectinload(User.profile)).filter(User.email == email).first()
+        if not user:
+            # No revelar existencia
+            return True
+
+        if user.email_verified and user.is_active:
+            # Ya verificado; no es necesario reenviar
+            return True
+
+        # Invalidar tokens anteriores no usados
+        self.db.query(EmailVerificationToken).filter(
+            EmailVerificationToken.user_id == user.id,
+            EmailVerificationToken.is_used == False
+        ).update({"is_used": True})
+
+        # Crear nuevo token
+        verification_token = self.generate_secure_token()
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+        token_record = EmailVerificationToken(
+            user_id=user.id,
+            token=verification_token,
+            expires_at=expires_at
+        )
+        self.db.add(token_record)
+        self.db.commit()
+
+        # Enviar email (asíncrono)
+        send_verification_email_task.delay(
+            user_email=user.email,
+            user_name=user.profile.first_name if user.profile else user.email,
+            verification_token=verification_token,
+            company_name=None
+        )
+        return True
 
     def login(self, email: str, password: str) -> TokenResponse:
         """
@@ -188,6 +209,7 @@ class AuthService:
             "user_name": user.profile.full_name
         }
         access_token = create_access_token(token_data)
+        refresh_token = create_refresh_token(str(user.id))
 
         # Obtener empresas del usuario
         companies = []
@@ -207,7 +229,8 @@ class AuthService:
             token_type="bearer",
             expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             user=UserOut.from_orm(user),
-            companies=companies
+            companies=companies,
+            refresh_token=refresh_token
         )
 
     def select_company(self, user_id: UUID, company_id: UUID) -> ContextTokenResponse:
@@ -443,4 +466,80 @@ class AuthService:
 
         self.db.commit()
         return user, invitation.company
+
+    def list_invitations(
+        self,
+        company_id: UUID,
+        limit: int = 50,
+        offset: int = 0
+    ) -> list:
+        """Listar invitaciones pendientes por empresa (paginadas)."""
+        query = self.db.query(CompanyInvitation).options(
+            selectinload(CompanyInvitation.company),
+            selectinload(CompanyInvitation.invited_by).selectinload(User.profile)
+        ).filter(
+            CompanyInvitation.company_id == company_id,
+            CompanyInvitation.is_accepted == False,
+            CompanyInvitation.expires_at > datetime.now(timezone.utc)
+        ).order_by(CompanyInvitation.created_at.desc())
+
+        invitations = query.offset(offset).limit(min(limit, 100)).all()
+
+        results = []
+        for inv in invitations:
+            results.append({
+                "id": inv.id,
+                "invitee_email": inv.invitee_email,
+                "role": inv.role,
+                "expires_at": inv.expires_at,
+                "is_accepted": inv.is_accepted,
+                "invited_by_name": inv.invited_by.profile.full_name if inv.invited_by and inv.invited_by.profile else "",
+                "company_name": inv.company.name if inv.company else ""
+            })
+        return results
+
+    def refresh_access_token(self, refresh_token: str) -> TokenResponse:
+        """Generar un nuevo access token a partir de un refresh token válido."""
+        payload = verify_token(refresh_token)
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token no es de tipo refresh")
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Refresh token inválido")
+
+        # Cargar usuario y empresas
+        user = self.db.query(User).options(
+            selectinload(User.profile),
+            selectinload(User.user_companies).selectinload(UserCompany.company)
+        ).filter(User.id == user_id).first()
+
+        if not user or not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario inválido")
+
+        token_data = {
+            "sub": str(user.id),
+            "email": user.email,
+            "user_name": user.profile.full_name if user.profile else user.email
+        }
+        access_token = create_access_token(token_data)
+
+        companies = []
+        for uc in user.user_companies:
+            if uc.is_active:
+                companies.append(UserCompanyOut(
+                    id=uc.id,
+                    company_id=uc.company_id,
+                    role=uc.role,
+                    is_active=uc.is_active,
+                    joined_at=uc.joined_at,
+                    company_name=uc.company.name
+                ))
+
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            user=UserOut.from_orm(user),
+            companies=companies
+        )
 

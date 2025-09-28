@@ -5,6 +5,7 @@ import logging
 
 # Import database components
 from app.database.database import sync_engine, Base
+from sqlalchemy import inspect, text
 
 # Import middleware
 from app.common.middleware import TenantMiddleware, SecurityHeadersMiddleware
@@ -17,6 +18,7 @@ from app.modules.products.router import product_router
 from app.modules.brands.router import brand_router
 from app.modules.categories.router import categories_router
 from app.modules.files.router_simple import router as files_router
+from app.modules.email.router import router as email_router
 
 # Import models for table creation
 import app.modules.auth.models
@@ -72,6 +74,7 @@ app.include_router(pdv_router, prefix="/pdv", tags=["PDVs"])
 app.include_router(product_router, prefix="/products", tags=["Products"])
 app.include_router(brand_router, prefix="/brands", tags=["Brands"])
 app.include_router(files_router)
+app.include_router(email_router)
 
 # Create database tables (only for development - use migrations in production)
 if settings.ENVIRONMENT == "development":
@@ -94,6 +97,41 @@ async def startup_event():
     logger.info("Ally360 API starting up...")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
+
+    # Lightweight schema sync for development environments (no Alembic)
+    if settings.ENVIRONMENT == "development":
+        try:
+            inspector = inspect(sync_engine)
+            tables = inspector.get_table_names()
+            if "users" in tables:
+                cols = {c["name"] for c in inspector.get_columns("users")}
+                with sync_engine.begin() as conn:
+                    if "is_superuser" not in cols:
+                        logger.info("Adding missing column users.is_superuser (BOOLEAN DEFAULT FALSE)")
+                        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superuser BOOLEAN DEFAULT FALSE"))
+                    if "email_verified" not in cols:
+                        logger.info("Adding missing column users.email_verified (BOOLEAN DEFAULT FALSE)")
+                        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE"))
+                    if "email_verified_at" not in cols:
+                        logger.info("Adding missing column users.email_verified_at (TIMESTAMPTZ NULL)")
+                        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ NULL"))
+                    if "last_login" not in cols:
+                        logger.info("Adding missing column users.last_login (TIMESTAMPTZ NULL)")
+                        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ NULL"))
+                    if "profile_id" not in cols:
+                        logger.info("Adding missing column users.profile_id (UUID NULL)")
+                        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_id UUID NULL"))
+                    if "created_at" not in cols:
+                        logger.info("Adding missing column users.created_at (TIMESTAMPTZ DEFAULT now())")
+                        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()"))
+                    if "updated_at" not in cols:
+                        logger.info("Adding missing column users.updated_at (TIMESTAMPTZ DEFAULT now())")
+                        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()"))
+                    if "deleted_at" not in cols:
+                        logger.info("Adding missing column users.deleted_at (TIMESTAMPTZ NULL)")
+                        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL"))
+        except Exception as e:
+            logger.warning(f"Schema sync skipped or failed: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():

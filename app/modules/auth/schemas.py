@@ -33,7 +33,6 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     profile: ProfileCreate
-    company_name: Optional[str] = Field(None, description="Nombre de la empresa (para propietarios)")
 
     @validator('password')
     def validate_password(cls, v):
@@ -73,6 +72,7 @@ class TokenResponse(BaseModel):
     expires_in: int
     user: UserOut
     companies: List[UserCompanyOut] = []
+    refresh_token: Optional[str] = None
 
 class ContextTokenResponse(BaseModel):
     access_token: str
@@ -110,6 +110,13 @@ class PasswordResetConfirm(BaseModel):
 class CompanyInvitationCreate(BaseModel):
     email: EmailStr
     role: str = Field(..., description="Rol a asignar: owner, admin, seller, accountant, viewer")
+
+    @validator('role')
+    def validate_role(cls, v):
+        allowed = {"owner", "admin", "seller", "accountant", "viewer"}
+        if v not in allowed:
+            raise ValueError(f"Rol inválido. Debe ser uno de: {', '.join(sorted(allowed))}")
+        return v
 
 class CompanyInvitationOut(BaseModel):
     id: UUID

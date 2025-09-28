@@ -23,13 +23,29 @@ class TenantMiddleware(BaseHTTPMiddleware):
         "/openapi.json",
         "/auth/login",
         "/auth/register",
+        "/auth/verify-email",
+        "/auth/resend-verification",
+        "/auth/request-password-reset",
+        "/auth/reset-password",
+        "/auth/accept-invitation",
+        "/auth/refresh",
         "/health",
         "/"
     ]
+
+    # Exact path exemptions (no startswith)
+    EXEMPT_EXACT = {
+        "/company",           # sometimes frameworks normalize trailing slash
+        "/company/",          # create company (POST)
+        "/company/select-company",
+        "/company/my_companies",
+    }
     
     async def dispatch(self, request: Request, call_next):
         # Skip tenant validation for exempt paths
-        if any(request.url.path.startswith(path) for path in self.EXEMPT_PATHS):
+        if request.url.path in self.EXEMPT_EXACT or any(
+            request.url.path.startswith(path) for path in self.EXEMPT_PATHS
+        ):
             return await call_next(request)
             
         # Skip for OPTIONS requests (CORS preflight)

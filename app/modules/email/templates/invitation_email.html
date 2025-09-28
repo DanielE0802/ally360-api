@@ -1,37 +1,20 @@
-<!-- 
-    PLACEHOLDER - Template de invitación
-    
-    Este archivo será reemplazado por el template real.
-    
-    Variables disponibles:
-    - invitee_email: Email del invitado
-    - inviter_name: Nombre de quien invita
-    - company_name: Nombre de la empresa
-    - invitation_url: URL de aceptación con token
-    - role: Rol asignado
-    - support_email: Email de soporte
--->
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Invitación a {{ company_name }}</title>
-</head>
-<body>
-    <h1>¡Has sido invitado!</h1>
-    
-    <p>{{ inviter_name }} te ha invitado a unirte a <strong>{{ company_name }}</strong> en Ally360.</p>
-    
-    <p>Rol asignado: <strong>{{ role }}</strong></p>
-    
-    <p>Para aceptar la invitación y crear tu cuenta, haz clic en el siguiente enlace:</p>
-    
-    <a href="{{ invitation_url }}">Aceptar invitación</a>
-    
-    <p>Esta invitación expirará en 7 días.</p>
-    
-    <p>¿Necesitas ayuda? Contáctanos en: {{ support_email }}</p>
-    
-    <p>Saludos,<br>El equipo de Ally360</p>
-</body>
-</html>
+{% extends "base_email.html" %}
+
+{% block page_title %}Invitación a {{ company_name }}{% endblock %}
+{% block header_title %}👋 Invitación a {{ company_name }}{% endblock %}
+
+{% block content %}
+<p class="text-primary">
+    ¡Has sido invitado!
+</p>
+<p class="subtitle">
+    {{ inviter_name }} te ha invitado a unirte a <strong>{{ company_name }}</strong> en Ally360.
+</p>
+<p class="subtitle">Rol asignado: <strong>{{ role }}</strong></p>
+<p class="subtitle">Para aceptar la invitación y crear tu cuenta, haz clic en el siguiente botón:</p>
+<div class="text-center" style="margin: 30px 0;">
+    <a href="{{ invitation_url }}" target="_blank" class="button-primary">Aceptar invitación</a>
+</div>
+<p class="text-secondary">Esta invitación expirará en 7 días.</p>
+<p class="text-secondary">— El equipo de Ally360</p>
+{% endblock %}
