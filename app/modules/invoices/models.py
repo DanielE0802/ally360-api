@@ -10,7 +10,8 @@ import enum
 
 
 class InvoiceType(enum.Enum):
-    SALE = "sale"  # Solo ingresos/ventas por ahora
+    SALE = "sale"    # Facturas regulares de venta
+    POS = "pos"      # Ventas POS (punto de venta)
     # PURCHASE = "purchase"  # Para futuro
     # EXPENSE = "expense"    # Para futuro
 
@@ -42,6 +43,8 @@ class Invoice(Base, TenantMixin, TimestampMixin):
     # Keep column name customer_id for backward compatibility, but point to contacts table
     customer_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # POS-specific reference
+    seller_id = Column(UUID(as_uuid=True), ForeignKey("sellers.id"), nullable=True, index=True)
     
     # Invoice data
     number = Column(String(50), nullable=True)  # Secuencia simple por empresa/pdv
@@ -66,6 +69,8 @@ class Invoice(Base, TenantMixin, TimestampMixin):
     # Relationship to unified Contact entity (customers/providers)
     customer = relationship("Contact")
     created_by_user = relationship("User")
+    # POS-specific relationship
+    seller = relationship("Seller")
     line_items = relationship("InvoiceLineItem", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
 

@@ -157,14 +157,3 @@ Si vienes de un sistema con entidades separadas, sigue estos pasos:
 - Variables de entorno actualizadas
 
 ---
-
-## Contributors
-
-- **Development Team**: Implementación inicial y arquitectura
-- **QA Team**: Testing y validación
-- **DevOps Team**: Deployment y configuración
-- **Business Team**: Validaciones fiscales colombianas
-
----
-
-*Para reportar bugs o solicitar nuevas funcionalidades, crear un issue en el repositorio del proyecto.*
