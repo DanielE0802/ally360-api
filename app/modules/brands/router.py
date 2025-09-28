@@ -14,24 +14,27 @@ def create_brand(
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
-    return service.create_brand(db, brand, auth_context.tenant_id)
+    brand_service = service.BrandService(db)
+    return brand_service.create_brand(brand, auth_context.tenant_id, auth_context.user.id)
 
 @brand_router.get("/", response_model=BrandList)
 def list_brands(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant"]))
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
 ):
-    return service.get_all_brands(db, auth_context.tenant_id, limit, offset)
+    brand_service = service.BrandService(db)
+    return brand_service.get_all_brands(auth_context.tenant_id, limit, offset)
 
 @brand_router.get("/{brand_id}", response_model=BrandOut)
 def get_brand(
     brand_id: UUID, 
     db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant"]))
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
 ):
-    return service.get_brand_by_id(db, brand_id, auth_context.tenant_id)
+    brand_service = service.BrandService(db)
+    return brand_service.get_brand_by_id(brand_id, auth_context.tenant_id)
 
 @brand_router.patch("/{brand_id}", response_model=BrandOut)
 def update_brand(
@@ -40,7 +43,8 @@ def update_brand(
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
-    return service.update_brand(db, brand_id, update, auth_context.tenant_id)
+    brand_service = service.BrandService(db)
+    return brand_service.update_brand(brand_id, update, auth_context.tenant_id, auth_context.user.id)
 
 @brand_router.delete("/{brand_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_brand(
@@ -48,4 +52,5 @@ def delete_brand(
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
-    service.delete_brand(db, brand_id, auth_context.tenant_id)
+    brand_service = service.BrandService(db)
+    brand_service.delete_brand(brand_id, auth_context.tenant_id)
