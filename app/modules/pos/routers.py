@@ -48,12 +48,13 @@ from app.modules.pos.schemas import (
 
 # ===== CASH REGISTERS ROUTER =====
 
-cash_registers_router = APIRouter(prefix="/cash-registers", tags=["Cash Registers"])
+cash_registers_router = APIRouter(prefix="/cash-registers", tags=["POS"])
 
 
 @cash_registers_router.post("/open", response_model=CashRegisterOut, status_code=status.HTTP_201_CREATED)
 async def open_cash_register(
     register_data: CashRegisterOpen,
+    pdv_id: UUID = Query(..., description="ID del punto de venta"),
     auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "cashier"])),
     db: Session = Depends(get_db)
 ):
@@ -71,9 +72,9 @@ async def open_cash_register(
     service = CashRegisterService(db)
     return service.open_cash_register(
         register_data=register_data,
-        pdv_id=auth_context.pdv_id,
+        pdv_id=pdv_id,
         tenant_id=auth_context.tenant_id,
-        user_id=auth_context.user.id
+        user_id=auth_context.user_id
     )
 
 
@@ -101,7 +102,7 @@ async def close_cash_register(
         register_id=register_id,
         close_data=close_data,
         tenant_id=auth_context.tenant_id,
-        user_id=auth_context.user.id
+        user_id=auth_context.user_id
     )
 
 
@@ -166,7 +167,7 @@ async def get_cash_register_detail(
 
 # ===== CASH MOVEMENTS ROUTER =====
 
-cash_movements_router = APIRouter(prefix="/cash-movements", tags=["Cash Movements"])
+cash_movements_router = APIRouter(prefix="/cash-movements", tags=["POS"])
 
 
 @cash_movements_router.post("/", response_model=CashMovementOut, status_code=status.HTTP_201_CREATED)
@@ -195,7 +196,7 @@ async def create_cash_movement(
     return service.create_movement(
         movement_data=movement_data,
         tenant_id=auth_context.tenant_id,
-        user_id=auth_context.user.id
+        user_id=auth_context.user_id
     )
 
 
@@ -237,7 +238,7 @@ async def get_cash_movements(
 
 # ===== SELLERS ROUTER =====
 
-sellers_router = APIRouter(prefix="/sellers", tags=["Sellers"])
+sellers_router = APIRouter(prefix="/sellers", tags=["POS"])
 
 
 @sellers_router.post("/", response_model=SellerOut, status_code=status.HTTP_201_CREATED)
@@ -266,7 +267,7 @@ async def create_seller(
     return service.create_seller(
         seller_data=seller_data,
         tenant_id=auth_context.tenant_id,
-        user_id=auth_context.user.id
+        user_id=auth_context.user_id
     )
 
 
@@ -346,7 +347,7 @@ async def update_seller(
         seller_id=seller_id,
         seller_data=seller_data,
         tenant_id=auth_context.tenant_id,
-        user_id=auth_context.user.id
+        user_id=auth_context.user_id
     )
 
 
@@ -370,7 +371,7 @@ async def delete_seller(
     service.delete_seller(
         seller_id=seller_id,
         tenant_id=auth_context.tenant_id,
-        user_id=auth_context.user.id
+        user_id=auth_context.user_id
     )
     
     return {"message": "Vendedor desactivado exitosamente"}
@@ -378,12 +379,13 @@ async def delete_seller(
 
 # ===== POS INVOICES ROUTER =====
 
-pos_invoices_router = APIRouter(prefix="/pos/sales", tags=["POS Sales"])
+pos_invoices_router = APIRouter(prefix="/pos/sales", tags=["POS"])
 
 
 @pos_invoices_router.post("/", response_model=POSInvoiceOut, status_code=status.HTTP_201_CREATED)
 async def create_pos_sale(
     sale_data: POSInvoiceCreate,
+    pdv_id: UUID = Query(..., description="ID del punto de venta"),
     auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "cashier"])),
     db: Session = Depends(get_db)
 ):
@@ -413,9 +415,9 @@ async def create_pos_sale(
     service = POSInvoiceService(db)
     return service.create_pos_sale(
         sale_data=sale_data,
-        pdv_id=auth_context.pdv_id,
+        pdv_id=pdv_id,
         tenant_id=auth_context.tenant_id,
-        user_id=auth_context.user.id
+        user_id=auth_context.user_id
     )
 
 

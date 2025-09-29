@@ -80,7 +80,6 @@ class CashRegister(Base, TenantMixin, TimestampMixin):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "pdv_id", "name", name="uq_cash_register_tenant_pdv_name"),
-        TenantMixin.__table_args__
     )
 
     @property
@@ -136,7 +135,7 @@ class CashMovement(Base, TenantMixin, TimestampMixin):
     invoice = relationship("Invoice")
     created_by_user = relationship("User")
 
-    __table_args__ = (TenantMixin.__table_args__,)
+    __table_args__ = ()
 
     @property
     def signed_amount(self):
@@ -178,5 +177,4 @@ class Seller(Base, TenantMixin, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("tenant_id", "email", name="uq_seller_tenant_email"),
         UniqueConstraint("tenant_id", "document", name="uq_seller_tenant_document"),
-        TenantMixin.__table_args__
     )

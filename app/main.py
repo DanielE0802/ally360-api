@@ -24,6 +24,19 @@ from app.modules.bills.router import bills_router
 from app.modules.contacts.router import router as contacts_router
 from app.modules.files.router_simple import router as files_router
 from app.modules.email.router import router as email_router
+from app.modules.pos.routers import (
+    cash_registers_router, 
+    cash_movements_router, 
+    sellers_router, 
+    pos_invoices_router
+)
+from app.modules.reports.routers import (
+    sales_router as sales_reports_router,
+    purchases_router as purchases_reports_router, 
+    inventory_router as inventory_reports_router,
+    cash_registers_router as cash_registers_reports_router,
+    financial_router as financial_reports_router
+)
 
 # Import models for table creation
 import app.modules.auth.models
@@ -36,6 +49,8 @@ import app.modules.invoices.models
 import app.modules.bills.models
 import app.modules.contacts.models
 import app.modules.files.models
+import app.modules.pos.models
+import app.modules.reports  # Import module to register models
 
 from app.core.config import settings
 
@@ -84,6 +99,15 @@ app.include_router(brand_router, prefix="/brands", tags=["Brands"])
 app.include_router(taxes_router, tags=["Taxes"])
 app.include_router(invoices_router)
 app.include_router(bills_router)
+app.include_router(cash_registers_router, prefix="/api/v1")
+app.include_router(cash_movements_router, prefix="/api/v1")
+app.include_router(sellers_router, prefix="/api/v1")
+app.include_router(pos_invoices_router, prefix="/api/v1")
+app.include_router(sales_reports_router, prefix="/api/v1")
+app.include_router(purchases_reports_router, prefix="/api/v1")  
+app.include_router(inventory_reports_router, prefix="/api/v1")
+app.include_router(cash_registers_reports_router, prefix="/api/v1")
+app.include_router(financial_reports_router, prefix="/api/v1")
 app.include_router(contacts_router, tags=["Contacts"])
 app.include_router(stock_router, tags=["Inventory"])
 app.include_router(movements_router, tags=["Inventory"])
