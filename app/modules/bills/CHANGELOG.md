@@ -123,38 +123,4 @@ app.include_router(bills_router, tags=["Bills"])
 import app.modules.bills.models
 ```
 
----
-
-## Convenciones de Versionado
-
-### Major (X.0.0)
-- Cambios incompatibles en la API
-- Modificaciones significativas en el modelo de datos
-- Refactorización mayor de servicios
-
-### Minor (0.X.0)  
-- Nuevas funcionalidades compatibles hacia atrás
-- Nuevos endpoints o servicios
-- Mejoras significativas en funcionalidades existentes
-
-### Patch (0.0.X)
-- Corrección de bugs
-- Mejoras menores en validaciones
-- Optimizaciones de performance
-- Actualizaciones de documentación
-
----
-
-## Proceso de Release
-
-1. **Desarrollo**: Nuevas funcionalidades en branches feature/*
-2. **Testing**: Pruebas unitarias e integración
-3. **Review**: Code review y documentación
-4. **Release**: Merge a main + tag de versión
-5. **Deploy**: Migración de BD + deploy de código
-6. **Monitor**: Verificación en ambiente productivo
-
----
-
-*Mantenido por el equipo de desarrollo Ally360*  
-*Última actualización: 28 de septiembre de 2025*
+*Mantenido por el equipo de desarrollo Ally360*
