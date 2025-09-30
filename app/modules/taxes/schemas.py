@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 from enum import Enum
+from datetime import datetime
 
 
 class TaxType(str, Enum):
@@ -52,8 +53,8 @@ class TaxOut(TaxBase):
     id: UUID
     is_editable: bool
     company_id: Optional[UUID] = None
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

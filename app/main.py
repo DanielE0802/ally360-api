@@ -83,7 +83,7 @@ app.add_middleware(TenantMiddleware)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8080"],  # Add your frontend URLs
+    allow_origins=["http://localhost:5173", "http://localhost:8080", "http://localhost:4173"],  # Add your frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

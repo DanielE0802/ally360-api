@@ -15,12 +15,12 @@ class TaxService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_local_tax(self, tax_data: TaxCreate, company_id: str) -> Tax:
+    def create_local_tax(self, tax_data: TaxCreate, tenant_id: UUID) -> Tax:
         """Crear un impuesto local para la empresa"""
         try:
             # Verificar que no exista un impuesto con el mismo nombre en la empresa
             existing = self.db.query(Tax).filter(
-                Tax.company_id == company_id,
+                Tax.company_id == tenant_id,
                 Tax.name == tax_data.name
             ).first()
             
@@ -33,7 +33,7 @@ class TaxService:
             # Crear el impuesto local
             tax = Tax(
                 **tax_data.model_dump(),
-                company_id=company_id,
+                company_id=tenant_id,
                 is_editable=True
             )
             
@@ -60,12 +60,12 @@ class TaxService:
                 detail=f"Error interno del servidor: {str(e)}"
             )
 
-    def get_available_taxes(self, company_id: str, limit: int = 100, offset: int = 0) -> dict:
+    def get_available_taxes(self, tenant_id: UUID, limit: int = 100, offset: int = 0) -> dict:
         """Obtener impuestos disponibles (globales + locales de la empresa)"""
         try:
             # Impuestos globales (company_id es NULL) + impuestos locales de la empresa
             query = self.db.query(Tax).filter(
-                (Tax.company_id == company_id) | (Tax.company_id.is_(None))
+                (Tax.company_id == tenant_id) | (Tax.company_id.is_(None))
             )
             
             total = query.count()
@@ -83,11 +83,11 @@ class TaxService:
                 detail=f"Error al obtener impuestos: {str(e)}"
             )
 
-    def get_tax_by_id(self, tax_id: UUID, company_id: str) -> Tax:
+    def get_tax_by_id(self, tax_id: UUID, tenant_id: UUID) -> Tax:
         """Obtener un impuesto específico"""
         tax = self.db.query(Tax).filter(
             Tax.id == tax_id,
-            (Tax.company_id == company_id) | (Tax.company_id.is_(None))
+            (Tax.company_id == tenant_id) | (Tax.company_id.is_(None))
         ).first()
         
         if not tax:
@@ -97,12 +97,12 @@ class TaxService:
             )
         return tax
 
-    def update_local_tax(self, tax_id: UUID, tax_update: TaxUpdate, company_id: str) -> Tax:
+    def update_local_tax(self, tax_id: UUID, tax_update: TaxUpdate, tenant_id: UUID) -> Tax:
         """Actualizar un impuesto local (solo si es editable)"""
         try:
             tax = self.db.query(Tax).filter(
                 Tax.id == tax_id,
-                Tax.company_id == company_id
+                Tax.company_id == tenant_id
             ).first()
             
             if not tax:
@@ -146,12 +146,12 @@ class TaxService:
                 detail=f"Error interno del servidor: {str(e)}"
             )
 
-    def delete_local_tax(self, tax_id: UUID, company_id: str) -> dict:
+    def delete_local_tax(self, tax_id: UUID, tenant_id: UUID) -> dict:
         """Eliminar un impuesto local si no está en uso"""
         try:
             tax = self.db.query(Tax).filter(
                 Tax.id == tax_id,
-                Tax.company_id == company_id
+                Tax.company_id == tenant_id
             ).first()
             
             if not tax:
@@ -190,13 +190,13 @@ class TaxService:
                 detail=f"Error interno del servidor: {str(e)}"
             )
 
-    def assign_taxes_to_product(self, product_id: UUID, tax_ids: List[UUID], company_id: str) -> List[ProductTax]:
+    def assign_taxes_to_product(self, product_id: UUID, tax_ids: List[UUID], tenant_id: UUID) -> List[ProductTax]:
         """Asignar impuestos a un producto"""
         try:
             # Verificar que el producto existe y pertenece a la empresa
             product = self.db.query(Product).filter(
                 Product.id == product_id,
-                Product.tenant_id == company_id
+                Product.tenant_id == tenant_id
             ).first()
             
             if not product:
@@ -208,7 +208,7 @@ class TaxService:
             # Verificar que todos los impuestos existen y están disponibles para la empresa
             taxes = self.db.query(Tax).filter(
                 Tax.id.in_(tax_ids),
-                (Tax.company_id == company_id) | (Tax.company_id.is_(None))
+                (Tax.company_id == tenant_id) | (Tax.company_id.is_(None))
             ).all()
             
             if len(taxes) != len(tax_ids):
@@ -222,7 +222,7 @@ class TaxService:
             # Eliminar asignaciones existentes
             self.db.query(ProductTax).filter(
                 ProductTax.product_id == product_id,
-                ProductTax.tenant_id == company_id
+                ProductTax.tenant_id == tenant_id
             ).delete()
             
             # Crear nuevas asignaciones
@@ -231,7 +231,7 @@ class TaxService:
                 product_tax = ProductTax(
                     product_id=product_id,
                     tax_id=tax_id,
-                    tenant_id=company_id
+                    tenant_id=tenant_id
                 )
                 self.db.add(product_tax)
                 product_taxes.append(product_tax)
@@ -259,12 +259,12 @@ class TaxService:
                 detail=f"Error interno del servidor: {str(e)}"
             )
 
-    def get_product_taxes(self, product_id: UUID, company_id: str) -> List[ProductTax]:
+    def get_product_taxes(self, product_id: UUID, tenant_id: UUID) -> List[ProductTax]:
         """Obtener los impuestos asignados a un producto"""
         try:
             product_taxes = self.db.query(ProductTax).filter(
                 ProductTax.product_id == product_id,
-                ProductTax.tenant_id == company_id
+                ProductTax.tenant_id == tenant_id
             ).all()
             
             return product_taxes
@@ -275,12 +275,12 @@ class TaxService:
                 detail=f"Error al obtener impuestos del producto: {str(e)}"
             )
 
-    def calculate_taxes(self, base_amount: Decimal, tax_ids: List[UUID], company_id: str) -> List[TaxCalculation]:
+    def calculate_taxes(self, base_amount: Decimal, tax_ids: List[UUID], tenant_id: UUID) -> List[TaxCalculation]:
         """Calcular impuestos para una base gravable"""
         try:
             taxes = self.db.query(Tax).filter(
                 Tax.id.in_(tax_ids),
-                (Tax.company_id == company_id) | (Tax.company_id.is_(None))
+                (Tax.company_id == tenant_id) | (Tax.company_id.is_(None))
             ).all()
             
             calculations = []

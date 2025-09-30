@@ -11,6 +11,7 @@ import json
 import logging
 
 from app.core.config import settings
+from urllib.parse import urlparse, urlunparse
 from app.modules.files.schemas import FileUploadRequest, FileUploadResponse, FileDownloadResponse
 
 logger = logging.getLogger(__name__)
@@ -20,14 +21,36 @@ class MinIOService:
     """Service for handling MinIO operations with presigned URLs"""
     
     def __init__(self):
+        # Cliente interno para operaciones de la aplicación
         self.client = Minio(
             settings.minio_endpoint,
             access_key=settings.MINIO_ACCESS_KEY,
             secret_key=settings.MINIO_SECRET_KEY,
             secure=settings.MINIO_USE_SSL
         )
+        
+        # Cliente público para generar presigned URLs accesibles desde el frontend
+        self.public_client = Minio(
+            settings.minio_public_endpoint,
+            access_key=settings.MINIO_ACCESS_KEY,
+            secret_key=settings.MINIO_SECRET_KEY,
+            secure=settings.MINIO_USE_SSL
+        )
+        
         self.bucket_name = settings.MINIO_BUCKET_NAME
         self._ensure_bucket_exists()
+        # Cache region in public client to avoid network calls to public endpoint
+        try:
+            region = self.client.get_bucket_location(self.bucket_name)
+        except Exception:
+            # Default region for MinIO
+            region = "us-east-1"
+        # MinIO SDK stores regions in a private map; set it to skip lookups
+        try:
+            if hasattr(self.public_client, "_region_map"):
+                self.public_client._region_map[self.bucket_name] = region
+        except Exception:
+            pass
     
     def _ensure_bucket_exists(self):
         """Ensure the bucket exists, create if it doesn't"""
@@ -95,7 +118,8 @@ class MinIOService:
                     detail=f"File type {file_request.content_type} not allowed"
                 )
             
-            upload_url = self.client.presigned_put_object(
+            # Generate with PUBLIC client so the host in the signature matches the browser host
+            upload_url = self.public_client.presigned_put_object(
                 bucket_name=self.bucket_name,
                 object_name=key,
                 expires=expires
@@ -122,7 +146,8 @@ class MinIOService:
     ) -> str:
         """Generate presigned URL for file download"""
         try:
-            download_url = self.client.presigned_get_object(
+            # Generate with PUBLIC client so the host in the signature matches the browser host
+            download_url = self.public_client.presigned_get_object(
                 bucket_name=self.bucket_name,
                 object_name=key,
                 expires=expires

@@ -9,7 +9,7 @@ from app.modules.categories.schemas import (
     CategoryCreate, CategoryUpdate, CategoryOut, CategoryList
 )
 
-categories_router = APIRouter(prefix="/categories", tags=["Categories"])
+categories_router = APIRouter(tags=["Categories"])
 
 @categories_router.post("/", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
 def create_category(

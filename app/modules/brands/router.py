@@ -6,7 +6,7 @@ from app.modules.brands import service
 from app.modules.brands.schemas import BrandCreate, BrandUpdate, BrandOut, BrandList
 from uuid import UUID
 
-brand_router = APIRouter(prefix="/brands", tags=["Brands"])
+brand_router = APIRouter(tags=["Brands"])
 
 @brand_router.post("/", response_model=BrandOut, status_code=status.HTTP_201_CREATED)
 def create_brand(

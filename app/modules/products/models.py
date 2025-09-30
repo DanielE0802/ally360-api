@@ -15,8 +15,12 @@ class Product(Base, TenantMixin, TimestampMixin):
     name = Column(String(100), nullable=False)
     sku = Column(String(50), nullable=False)
     description = Column(String(255), nullable=True)
+    bar_code = Column(String(50), nullable=True)  # Código de barras
     is_configurable = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    price_sale = Column(Numeric(15, 2), nullable=False, default=0)  # Precio de venta
+    price_base = Column(Numeric(15, 2), nullable=False, default=0)  # Precio base/costo
+    sell_in_negative = Column(Boolean, default=False)  # Permitir venta sin stock
 
     brand_id = Column(UUID(as_uuid=True), ForeignKey("brands.id"))
     category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"))
@@ -28,6 +32,7 @@ class Product(Base, TenantMixin, TimestampMixin):
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
     movements = relationship("InventoryMovement", back_populates="product")
     product_taxes = relationship("ProductTax", cascade="all, delete-orphan")
+    images = relationship("ProductImage", back_populates="product", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "sku", name="uq_product_tenant_sku"),
@@ -80,6 +85,7 @@ class Stock(Base, TenantMixin, TimestampMixin):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     quantity = Column(Integer, nullable=False, default=0)
+    min_quantity = Column(Integer, nullable=False, default=0)  # Cantidad mínima para alertas
 
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
     variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id"), nullable=True)
@@ -155,3 +161,22 @@ class InvoiceTax(Base, TenantMixin, TimestampMixin):
     # Relationships
     product = relationship("Product")
     tax = relationship("Tax")
+
+class ProductImage(Base, TenantMixin, TimestampMixin):
+    __tablename__ = "product_images"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    file_key = Column(String(500), nullable=False)  # Key en MinIO
+    file_name = Column(String(255), nullable=False)  # Nombre original del archivo
+    file_size = Column(Integer, nullable=False)  # Tamaño en bytes
+    content_type = Column(String(100), nullable=False)  # MIME type
+    is_primary = Column(Boolean, default=False)  # Imagen principal
+    sort_order = Column(Integer, default=0)  # Orden de visualización
+
+    # Relationships
+    product = relationship("Product", back_populates="images")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "product_id", "sort_order", name="uq_product_image_tenant_product_order"),
+    )

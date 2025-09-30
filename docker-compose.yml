@@ -81,6 +81,8 @@ services:
       - POSTGRES_HOST=postgres
       - REDIS_HOST=redis
       - MINIO_HOST=minio
+      - MINIO_PUBLIC_HOST=localhost
+      - MINIO_PUBLIC_PORT=9000
 
   celery-worker:
     depends_on:
@@ -98,6 +100,8 @@ services:
       - POSTGRES_HOST=postgres
       - REDIS_HOST=redis
       - MINIO_HOST=minio
+      - MINIO_PUBLIC_HOST=localhost
+      - MINIO_PUBLIC_PORT=9000
 
   celery-beat:
     depends_on:
@@ -115,6 +119,8 @@ services:
       - POSTGRES_HOST=postgres
       - REDIS_HOST=redis
       - MINIO_HOST=minio
+      - MINIO_PUBLIC_HOST=localhost
+      - MINIO_PUBLIC_PORT=9000
 
 volumes:
   redis-data:

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from app.database.database import get_db
 from app.modules.auth.dependencies import AuthDependencies
+from app.modules.auth.schemas import AuthContext
 from app.modules.taxes.service import TaxService
 from app.modules.taxes.schemas import (
     TaxCreate, TaxUpdate, TaxOut, TaxList, ProductTaxCreate, TaxCalculation
@@ -18,7 +19,7 @@ def list_available_taxes(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
 ):
     """
     Listar impuestos disponibles (globales + locales de la empresa)
@@ -35,7 +36,7 @@ def list_available_taxes(
 def create_local_tax(
     tax_data: TaxCreate,
     db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
     """
     Crear un impuesto local para la empresa
@@ -56,7 +57,7 @@ def create_local_tax(
 def get_tax(
     tax_id: UUID,
     db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
 ):
     """
     Obtener detalles de un impuesto específico
@@ -72,7 +73,7 @@ def update_local_tax(
     tax_id: UUID,
     tax_update: TaxUpdate,
     db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
     """
     Actualizar un impuesto local
@@ -93,7 +94,7 @@ def update_local_tax(
 def delete_local_tax(
     tax_id: UUID,
     db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
     """
     Eliminar un impuesto local
@@ -115,7 +116,7 @@ def calculate_taxes(
     base_amount: float = Query(..., ge=0, description="Base gravable"),
     tax_ids: List[UUID] = Query(..., description="IDs de los impuestos a calcular"),
     db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant"]))
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant"]))
 ):
     """
     Calcular impuestos para una base gravable
