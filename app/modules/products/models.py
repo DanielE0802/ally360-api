@@ -57,7 +57,9 @@ class ProductVariant(Base, TenantMixin, TimestampMixin):
         UniqueConstraint("tenant_id", "sku", name="uq_variant_tenant_sku"),
     )
 
-Product.variants = relationship("ProductVariant", back_populates="product")
+# NOTE: Relationship 'Product.variants' is already declared on Product with
+# cascade="all, delete-orphan". Do not override it here or we lose cascade
+# behavior and deletions will try to NULL product_id, violating NOT NULL.
 
 class InventoryMovement(Base, TenantMixin, TimestampMixin):
     __tablename__ = "inventory_movements"

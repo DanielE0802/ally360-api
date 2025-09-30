@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     # MinIO settings
     MINIO_HOST: str = 'minio'
     MINIO_PORT: int = 9000
+    MINIO_PUBLIC_HOST: str = 'localhost'  # Hostname público para presigned URLs
+    MINIO_PUBLIC_PORT: int = 9000
     MINIO_ACCESS_KEY: str = 'minioadmin'
     MINIO_SECRET_KEY: str = 'minioadmin'
     MINIO_BUCKET_NAME: str = 'ally360'
@@ -79,6 +81,10 @@ class Settings(BaseSettings):
     @property
     def minio_endpoint(self) -> str:
         return f"{self.MINIO_HOST}:{self.MINIO_PORT}"
+    
+    @property
+    def minio_public_endpoint(self) -> str:
+        return f"{self.MINIO_PUBLIC_HOST}:{self.MINIO_PUBLIC_PORT}"
 
     model_config = SettingsConfigDict(
         extra="allow",

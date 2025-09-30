@@ -60,7 +60,7 @@ def create_purchase_order(
     Las órdenes draft no afectan el inventario.
     """
     service = PurchaseOrderService(db)
-    return service.create_purchase_order(po_data, auth_context.tenant_id, auth_context.user.id)
+    return service.create_purchase_order(po_data, auth_context.tenant_id, auth_context.user_id)
 
 
 @purchase_orders_router.get("/", response_model=PurchaseOrderList)
@@ -117,7 +117,7 @@ def convert_purchase_order_to_bill(
     Si la factura se crea en estado 'open', se actualiza el inventario automáticamente.
     """
     service = PurchaseOrderService(db)
-    return service.convert_po_to_bill(po_id, conversion_data, auth_context.tenant_id, auth_context.user.id)
+    return service.convert_po_to_bill(po_id, conversion_data, auth_context.tenant_id, auth_context.user_id)
 
 
 @purchase_orders_router.post("/{po_id}/void")
@@ -151,7 +151,7 @@ def create_bill(
     Si el estado es 'open', se actualiza automáticamente el inventario.
     """
     service = BillService(db)
-    return service.create_bill(bill_data, auth_context.tenant_id, auth_context.user.id)
+    return service.create_bill(bill_data, auth_context.tenant_id, auth_context.user_id)
 
 
 @bills_router.get("/", response_model=BillList, tags=["Bills"])
@@ -247,7 +247,7 @@ def add_bill_payment(
     el estado cambia automáticamente a 'paid'.
     """
     service = BillPaymentService(db)
-    return service.create_payment(bill_id, payment_data, auth_context.tenant_id, auth_context.user.id)
+    return service.create_payment(bill_id, payment_data, auth_context.tenant_id, auth_context.user_id)
 
 
 @bills_router.get("/{bill_id}/payments", response_model=List[BillPaymentOut], tags=["Bills"])
@@ -306,7 +306,7 @@ def create_debit_note(
     Las notas débito con ajustes de cantidad actualizan automáticamente el inventario.
     """
     service = DebitNoteService(db)
-    return service.create_debit_note(debit_note_data, auth_context.tenant_id, auth_context.user.id)
+    return service.create_debit_note(debit_note_data, auth_context.tenant_id, auth_context.user_id)
 
 
 @debit_notes_router.get("/", response_model=DebitNoteList)

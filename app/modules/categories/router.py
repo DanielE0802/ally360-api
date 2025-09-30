@@ -18,7 +18,7 @@ def create_category(
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
     category_service = service.CategoryService(db)
-    return category_service.create_category(data, auth_context.tenant_id, auth_context.user.id)
+    return category_service.create_category(data, auth_context.tenant_id, auth_context.user_id)
 
 @categories_router.get("/", response_model=CategoryList)
 def list_categories(
@@ -47,7 +47,7 @@ def update_category(
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
     category_service = service.CategoryService(db)
-    return category_service.update_category(category_id, data, auth_context.tenant_id, auth_context.user.id)
+    return category_service.update_category(category_id, data, auth_context.tenant_id, auth_context.user_id)
 
 @categories_router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_category(

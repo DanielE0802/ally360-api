@@ -66,9 +66,18 @@ class ContactService:
             billing_address = contact_data.billing_address.dict() if contact_data.billing_address else None
             shipping_address = contact_data.shipping_address.dict() if contact_data.shipping_address else None
 
+            # Normalizar lista de tipos a strings
+            type_values = []
+            if contact_data.type:
+                for t in contact_data.type:
+                    try:
+                        type_values.append(t.value)  # Pydantic Enum
+                    except AttributeError:
+                        type_values.append(str(t))
+
             contact = Contact(
                 name=contact_data.name,
-                type=contact_data.type,
+                type=type_values,
                 email=contact_data.email,
                 phone_primary=contact_data.phone_primary,
                 phone_secondary=contact_data.phone_secondary,
@@ -222,7 +231,14 @@ class ContactService:
             
             for field, value in update_data.items():
                 if field == 'type' and value:
-                    setattr(contact, field, value)
+                    # Normalizar a lista de strings
+                    normalized = []
+                    for t in value:
+                        try:
+                            normalized.append(t.value)
+                        except AttributeError:
+                            normalized.append(str(t))
+                    setattr(contact, field, normalized)
                 elif field == 'id_type' and value:
                     setattr(contact, field, value.value)
                 elif field == 'person_type' and value:

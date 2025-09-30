@@ -17,6 +17,7 @@ from typing import Optional, List, Dict, Any, Union
 from uuid import UUID
 from datetime import date, datetime
 from enum import Enum
+from app.modules.auth.schemas import UserOut
 
 
 # ===== ENUMS =====
@@ -41,12 +42,23 @@ class PersonType(str, Enum):
 # ===== ADDRESS SCHEMAS =====
 
 class AddressBase(BaseModel):
-    """Esquema base para direcciones"""
-    line1: str = Field(..., min_length=1, max_length=200, description="Dirección línea 1")
-    line2: Optional[str] = Field(None, max_length=200, description="Dirección línea 2")
-    city: str = Field(..., min_length=1, max_length=100, description="Ciudad")
-    depto: str = Field(..., min_length=1, max_length=100, description="Departamento")
-    country: str = Field("CO", min_length=2, max_length=3, description="Código país")
+    """Esquema base para direcciones (flexible y retrocompatible)
+
+    Soporta tanto el formato simplificado como el anterior:
+    - Simplificado: address, city, state, country, postal_code
+    - Anterior: line1, line2, city, depto, country, postal_code
+    Todos los campos son opcionales para permitir creaciones mínimas.
+    """
+    # Formato simplificado
+    address: Optional[str] = Field(None, max_length=200, description="Dirección (línea completa)")
+    state: Optional[str] = Field(None, max_length=100, description="Departamento/Estado")
+    # Formato previo (retrocompatibilidad)
+    line1: Optional[str] = Field(None, max_length=200, description="Dirección línea 1 (legacy)")
+    line2: Optional[str] = Field(None, max_length=200, description="Dirección línea 2 (legacy)")
+    depto: Optional[str] = Field(None, max_length=100, description="Departamento (legacy)")
+    # Comunes
+    city: Optional[str] = Field(None, max_length=100, description="Ciudad")
+    country: Optional[str] = Field("CO", min_length=2, max_length=3, description="Código país (ISO)")
     postal_code: Optional[str] = Field(None, max_length=20, description="Código postal")
 
 
@@ -54,7 +66,7 @@ class AddressBase(BaseModel):
 
 class ContactBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="Nombre del contacto")
-    type: List[ContactType] = Field(..., min_items=1, description="Tipo de contacto: client, provider o ambos")
+    type: Optional[List[ContactType]] = Field(None, min_items=1, description="Tipo de contacto: client, provider o ambos")
     email: Optional[str] = Field(None, max_length=100, description="Email del contacto")
     
     # Teléfonos
@@ -97,8 +109,9 @@ class ContactBase(BaseModel):
     @field_validator('type')
     @classmethod
     def validate_type(cls, v):
-        if not v:
-            raise ValueError('Debe especificar al menos un tipo de contacto')
+        # Si no se especifica, por defecto es cliente (creación mínima)
+        if not v or len(v) == 0:
+            return [ContactType.CLIENT]
         # Eliminar duplicados manteniendo orden
         seen = set()
         unique_types = []
@@ -128,9 +141,9 @@ class ContactBase(BaseModel):
             if calculated_dv != dv:
                 raise ValueError(f'Dígito de verificación incorrecto. Debería ser: {calculated_dv}')
         
-        # Si no es NIT, no debería tener DV
+        # Si no es NIT, ignorar DV si viene
         elif dv:
-            raise ValueError('dv solo aplica para tipo NIT')
+            self.dv = None
 
         # Validación consistencia person_type vs id_type
         if id_type == IdType.NIT and person_type == PersonType.NATURAL:
@@ -139,7 +152,25 @@ class ContactBase(BaseModel):
         elif id_type == IdType.CC and person_type == PersonType.JURIDICA:
             raise ValueError('Personas jurídicas no pueden usar Cédula de Ciudadanía')
 
+        # Default de person_type cuando no es NIT y no se especifica
+        if id_type != IdType.NIT and person_type is None:
+            self.person_type = PersonType.NATURAL
+
         return self
+
+    @field_validator('person_type', mode='before')
+    @classmethod
+    def normalize_person_type(cls, v):
+        # Aceptar valores en mayúsculas y normalizarlos
+        if v is None:
+            return v
+        if isinstance(v, str):
+            lower = v.strip().lower()
+            if lower in (PersonType.NATURAL.value, PersonType.JURIDICA.value):
+                return PersonType(lower)
+        if isinstance(v, PersonType):
+            return v
+        raise ValueError("Input should be 'natural' or 'juridica'")
 
     @field_validator('credit_limit')
     @classmethod
@@ -215,6 +246,8 @@ class ContactUpdate(BaseModel):
 
 
 class ContactOut(ContactBase):
+    # En respuestas, siempre habrá tipo definido
+    type: List[ContactType]
     id: UUID
     is_active: bool
     deleted_at: Optional[datetime]
@@ -229,10 +262,13 @@ class ContactOut(ContactBase):
 
 class ContactDetail(ContactOut):
     """Esquema detallado con relaciones"""
-    seller: Optional[Dict[str, Any]] = None
-    created_by_user: Optional[Dict[str, Any]] = None
-    updated_by_user: Optional[Dict[str, Any]] = None
-    attachments: List['ContactAttachmentOut'] = []
+    seller: Optional[UserOut] = None
+    created_by_user: Optional[UserOut] = None
+    updated_by_user: Optional[UserOut] = None
+    attachments: List['ContactAttachmentOut'] = Field(default_factory=list)
+
+    class Config:
+        from_attributes = True
 
 
 class ContactList(BaseModel):

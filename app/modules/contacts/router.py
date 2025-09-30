@@ -53,7 +53,7 @@ async def create_contact(
     - **fiscal_responsibilities**: Responsabilidades fiscales para Colombia
     """
     contact_service = ContactService(db)
-    return contact_service.create_contact(contact_data, auth_context.tenant_id, auth_context.user.id)
+    return contact_service.create_contact(contact_data, auth_context.tenant_id, auth_context.user_id)
 
 
 @router.get("/", response_model=ContactList)
@@ -123,7 +123,7 @@ async def update_contact(
     Los campos no incluidos mantienen su valor actual.
     """
     contact_service = ContactService(db)
-    return contact_service.update_contact(contact_id, contact_data, auth_context.tenant_id, auth_context.user.id)
+    return contact_service.update_contact(contact_id, contact_data, auth_context.tenant_id, auth_context.user_id)
 
 
 @router.delete("/{contact_id}")
@@ -139,7 +139,7 @@ async def delete_contact(
     para mantener la integridad referencial con facturas y compras.
     """
     contact_service = ContactService(db)
-    return contact_service.delete_contact(contact_id, auth_context.tenant_id, auth_context.user.id)
+    return contact_service.delete_contact(contact_id, auth_context.tenant_id, auth_context.user_id)
 
 
 @router.post("/{contact_id}/restore", response_model=ContactDetail)
@@ -156,7 +156,7 @@ async def restore_contact(
     siempre que no exista conflicto con documentos duplicados.
     """
     contact_service = ContactService(db)
-    return contact_service.restore_contact(contact_id, auth_context.tenant_id, auth_context.user.id, restore_data)
+    return contact_service.restore_contact(contact_id, auth_context.tenant_id, auth_context.user_id, restore_data)
 
 
 # ===== ENDPOINTS DE ESTADÍSTICAS =====
@@ -232,7 +232,7 @@ async def create_contact_attachment(
     - Otros documentos legales
     """
     attachment_service = ContactAttachmentService(db)
-    return attachment_service.create_attachment(contact_id, attachment_data, auth_context.tenant_id, auth_context.user.id)
+    return attachment_service.create_attachment(contact_id, attachment_data, auth_context.tenant_id, auth_context.user_id)
 
 
 @router.delete("/attachments/{attachment_id}")
@@ -268,7 +268,7 @@ async def bulk_activate_contacts(
             contact = contact_service.get_contact_by_id(contact_id, auth_context.tenant_id)
             if contact and not contact.is_active:
                 contact.is_active = True
-                contact.updated_by = auth_context.user.id
+                contact.updated_by = auth_context.user_id
                 db.commit()
                 results.append({"id": contact_id, "status": "activated"})
             else:
@@ -299,7 +299,7 @@ async def bulk_deactivate_contacts(
             contact = contact_service.get_contact_by_id(contact_id, auth_context.tenant_id)
             if contact and contact.is_active:
                 contact.is_active = False
-                contact.updated_by = auth_context.user.id
+                contact.updated_by = auth_context.user_id
                 db.commit()
                 results.append({"id": contact_id, "status": "deactivated"})
             else:

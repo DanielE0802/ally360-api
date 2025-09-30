@@ -13,11 +13,11 @@ Reemplaza las entidades Customer (invoices) y Supplier (bills)
 """
 
 from app.database.database import Base
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Numeric, Integer, Text, JSON, ARRAY
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Numeric, Integer, Text, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ARRAY as PG_ARRAY
 from uuid import uuid4
 from app.common.mixins import TenantMixin, TimestampMixin
 import enum
@@ -64,7 +64,7 @@ class Contact(Base, TenantMixin, TimestampMixin):
     
     # Información básica
     name = Column(String(200), nullable=False, index=True)
-    type = Column(ARRAY(String), nullable=False, index=True)  # ['client'], ['provider'], o ambos
+    type = Column(PG_ARRAY(String), nullable=False, index=True)  # ['client'], ['provider'], o ambos
     email = Column(String(100), nullable=True, index=True)
     
     # Teléfonos
@@ -77,7 +77,7 @@ class Contact(Base, TenantMixin, TimestampMixin):
     id_number = Column(String(50), nullable=True, index=True)
     dv = Column(String(2), nullable=True)  # Dígito de verificación para NIT
     person_type = Column(String(20), nullable=True)  # natural, juridica
-    fiscal_responsibilities = Column(ARRAY(String), nullable=True)  # Responsabilidades fiscales DIAN
+    fiscal_responsibilities = Column(PG_ARRAY(String), nullable=True)  # Responsabilidades fiscales DIAN
     
     # Términos comerciales
     payment_terms_days = Column(Integer, nullable=False, default=0)  # Días de plazo de pago

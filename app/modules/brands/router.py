@@ -15,7 +15,7 @@ def create_brand(
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
     brand_service = service.BrandService(db)
-    return brand_service.create_brand(brand, auth_context.tenant_id, auth_context.user.id)
+    return brand_service.create_brand(brand, auth_context.tenant_id, auth_context.user_id)
 
 @brand_router.get("/", response_model=BrandList)
 def list_brands(
@@ -44,7 +44,7 @@ def update_brand(
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
     brand_service = service.BrandService(db)
-    return brand_service.update_brand(brand_id, update, auth_context.tenant_id, auth_context.user.id)
+    return brand_service.update_brand(brand_id, update, auth_context.tenant_id, auth_context.user_id)
 
 @brand_router.delete("/{brand_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_brand(

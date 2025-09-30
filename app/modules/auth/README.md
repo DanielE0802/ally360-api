@@ -369,7 +369,7 @@ async def create_product(
         db=db,
         tenant_id=auth_context.tenant_id,
         product_data=product_data,
-        created_by=auth_context.user.id
+    created_by=auth_context.user_id
     )
     return product
 ```
@@ -474,7 +474,7 @@ async def test_role_permissions(client, role, expected_status):
 ```python
 # El AuthContext se propaga automáticamente
 request.state.tenant_id = auth_context.tenant_id
-request.state.user_id = auth_context.user.id
+request.state.user_id = auth_context.user_id
 request.state.user_role = auth_context.role
 ```
 
@@ -483,7 +483,7 @@ request.state.user_role = auth_context.role
 # Logs automáticos de acciones críticas
 await audit_service.log_action(
     tenant_id=auth_context.tenant_id,
-    user_id=auth_context.user.id,
+    user_id=auth_context.user_id,
     action="USER_INVITED",
     details={"invited_email": invite_data.email}
 )

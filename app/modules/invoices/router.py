@@ -33,7 +33,7 @@ def create_invoice(
     Se actualiza automáticamente el stock de los productos.
     """
     service = InvoiceService(db)
-    return service.create_invoice(invoice_data, auth_context.tenant_id, auth_context.user.id)
+    return service.create_invoice(invoice_data, auth_context.tenant_id, auth_context.user_id)
 
 
 @router.get("/", response_model=InvoiceList)
@@ -144,7 +144,7 @@ def add_payment(
     el estado cambia automáticamente a 'paid'.
     """
     service = InvoiceService(db)
-    return service.add_payment(invoice_id, payment_data, auth_context.tenant_id, auth_context.user.id)
+    return service.add_payment(invoice_id, payment_data, auth_context.tenant_id, auth_context.user_id)
 
 
 @router.get("/{invoice_id}/payments", response_model=List[PaymentOut])

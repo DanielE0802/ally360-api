@@ -799,13 +799,62 @@ def update_product(db: Session, tenant_id: UUID, product_id: UUID, data: dict):
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
     
-    for key, value in data.items():
-        if hasattr(product, key):
+    # Solo permitir actualizar campos escalares seguros
+    allowed_scalar_fields = {
+        "name",
+        "sku",
+        "description",
+        "bar_code",
+        "price_sale",
+        "price_base",
+        "sell_in_negative",
+        "is_active",
+        "brand_id",
+        "category_id",
+    }
+
+    # Actualizar campos escalares
+    for key, value in list(data.items()):
+        if key in allowed_scalar_fields and hasattr(product, key):
             setattr(product, key, value)
-    
+
+    # Validar pertenencia de brand/category al tenant si fueron actualizados
+    if "brand_id" in data and data.get("brand_id") is not None:
+        brand = db.query(Brand).filter(Brand.id == data["brand_id"], Brand.tenant_id == tenant_id).first()
+        if not brand:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La marca especificada no existe o no pertenece a esta empresa"
+            )
+        product.brand_id = brand.id
+
+    if "category_id" in data and data.get("category_id") is not None:
+        category = db.query(Category).filter(Category.id == data["category_id"], Category.tenant_id == tenant_id).first()
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La categoría especificada no existe o no pertenece a esta empresa"
+            )
+        product.category_id = category.id
+
+    # Manejo explícito de imágenes enviadas como base64
+    try:
+        images_value = data.get("images")
+        if isinstance(images_value, list) and images_value:
+            # Aceptamos lista de base64; ignorar si son URLs planas
+            base64_images = [img for img in images_value if isinstance(img, str) and img.startswith("data:image/")]
+            if base64_images:
+                process_base64_images(product.id, base64_images, tenant_id, db)
+    except Exception as e:
+        # No bloquear la actualización completa por fallo de imágenes
+        logger.warning(f"Fallo procesando imágenes en update_product: {e}")
+
+    # TODO: manejar actualización de impuestos (tax_ids), stocks, etc. de forma controlada
+
     db.commit()
     db.refresh(product)
-    return product
+    # Convert to response shape used by GET endpoints
+    return product_to_response(product)
 
 def delete_product(db: Session, tenant_id: UUID, product_id: UUID):
     """Elimina un producto"""

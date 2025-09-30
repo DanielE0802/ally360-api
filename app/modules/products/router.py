@@ -115,7 +115,7 @@ async def get_product(
     
     return await service.get_product_by_id_async(db, str(auth_context.tenant_id), product_id)
 
-@product_router.patch("/{product_id}", response_model=ProductOut)
+@product_router.patch("/{product_id}", response_model=GetProductResponse)
 def update_product(
     product_id: UUID,
     data: dict,  # TODO: Create proper update schema
