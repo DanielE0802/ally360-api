@@ -1,213 +1,251 @@
 
 # Ally360 API
 
-Ally360 es un ERP SaaS multi-tenant construido con FastAPI, PostgreSQL y MinIO para gestión empresarial escalable.
+Ally360 es un ERP SaaS multi-tenant construido con FastAPI, PostgreSQL y MinIO. Este repositorio contiene la API backend con arquitectura por capas, autenticación basada en JWT y manejo de archivos por presigned URLs. Está orientado a escalabilidad, seguridad y aislamiento por empresa (tenant).
 
-## Características principales
+## Contenidos
 
-### 🏢 Multi-tenant
-- Arquitectura multi-tenant completa con aislamiento por empresa
-- Middleware de tenant automático con `X-Company-ID`
-- Queries siempre filtradas por `tenant_id`
-- Provisioning automático de esquemas por empresa
+- Visión general
+- Arquitectura y tecnologías
+- Multi-tenancy y seguridad
+- Módulos principales
+- Estructura del repositorio
+- Puesta en marcha (Docker)
+- Migraciones de base de datos (Alembic)
+- Variables de entorno
+- Flujo de autenticación
+- Manejo de archivos (MinIO)
+- Tareas y cache (Celery/Redis)
+- Guía de desarrollo y estándares
+- Testing y verificación
+- Solución de problemas frecuentes
 
-### 🔐 Autenticación completa
-- **Registro con verificación de email**
-- **Login multi-empresa** con selección de contexto
-- **Tokens de contexto** con información de tenant
-- **Sistema de invitaciones** para empresas
-- **Restablecimiento de contraseñas**
-- **Roles contextuales**: owner, admin, seller, accountant, viewer
+## Visión general
 
-### 📁 Gestión de archivos
-- Almacenamiento con **MinIO** (S3-compatible)
-- **Presigned URLs** para subidas/descargas seguras
-- **Metadata en BD** con información de tenant
-- **Tareas asíncronas** para procesamiento
+Objetivo: ofrecer un ERP SaaS multi-empresa listo para crecer. Cada empresa es un tenant, todas las consultas se aíslan por `tenant_id`, y los flujos críticos contemplan seguridad y rendimiento.
 
-### 📧 Sistema de correos
-- **Templates de Jinja2** personalizables
-- **Envío asíncrono** con Celery
-- **Emails transaccionales**: verificación, invitaciones, reset
-- Configuración SMTP flexible
+Características clave
+- Multi-tenant con aislamiento estricto por `tenant_id`.
+- Autenticación JWT con selección de empresa y roles contextuales.
+- Manejo de archivos en MinIO con URLs prefirmadas (subida y descarga).
+- Arquitectura por capas: router → service → crud → models → schemas.
+- Async SQLAlchemy donde aplica, Redis para cache y rate limiting, Celery para trabajos en background.
+- Preparado para PgBouncer y despliegues escalables.
 
-### ⚡ Escalabilidad
-- **Async SQLAlchemy** para alto rendimiento
-- **Redis** para cache y rate limiting
-- **Celery** para tareas en background
-- **PgBouncer-ready** para pool de conexiones
+## Arquitectura y tecnologías
 
-## Flujo de autenticación
+- FastAPI (Python 3.11+)
+- PostgreSQL + SQLAlchemy ORM 2.x
+- Alembic para migraciones
+- MinIO (S3-compatible)
+- Redis (cache, rate limiting)
+- Celery (tareas asíncronas)
+- Docker y Docker Compose
 
-### 1. Registro de usuario
-```http
-POST /auth/register
-{
-  "email": "owner@company.com",
-  "password": "password123",
-  "profile": {
-    "first_name": "Juan",
-    "last_name": "Pérez",
-    "phone_number": "+1234567890"
-  }
-}
-```
+Principios de diseño
+- Multi-tenancy obligatorio: todas las tablas de negocio incluyen `tenant_id` y todas las queries lo filtran.
+- Capas separadas y responsabilidades claras.
+- Seguridad por defecto: validaciones fuertes en Pydantic, rate limiting por tenant, JWT con expiración corta.
+- Escalabilidad: uso de Redis, Celery, y conexiones listas para PgBouncer.
 
-### 2. Verificación de email
-```http
-POST /auth/verify-email
-{
-  "token": "verification-token-from-email"
-}
-```
+## Multi-tenancy y seguridad
 
-### 3. Login inicial
-```http
-POST /auth/login
-{
-  "username": "owner@company.com",
-  "password": "password123"
-}
-```
-Respuesta incluye lista de empresas disponibles.
+Resolución de tenant
+- Middleware extrae el `tenant_id` del header `X-Company-ID` y lo coloca en `request.state.tenant_id`.
+- Alternativamente, se puede usar un token de contexto con `tenant_id` empaquetado.
 
-### 4. Selección de empresa
-```http
-POST /auth/select-company
-{
-  "company_id": "uuid-de-la-empresa"
-}
-```
-Retorna token de contexto con `tenant_id`.
+Modelos con tenant
+- Todas las entidades de negocio heredan o incluyen `tenant_id`. Índices compuestos suelen incluir `tenant_id` para rendimiento.
 
-### 5. Uso con contexto
-```http
-GET /products/
-Authorization: Bearer <context-token>
-# O alternativamente:
-X-Company-ID: uuid-de-la-empresa
-```
+Autenticación y autorización
+- JWT con tipo de token `access` y `context`.
+- Roles por empresa: `owner`, `admin`, `seller`, `accountant`, `viewer`.
+- Dependencias de auth validan que el usuario pertenece al tenant antes de acceder a rutas.
 
-## Sistema de invitaciones
+## Módulos principales
 
-### Invitar usuario (owner/admin)
-```http
-POST /auth/invite-user
-Authorization: Bearer <context-token>
-{
-  "email": "nuevo@usuario.com",
-  "role": "seller"
-}
-```
+- auth: autenticación, usuarios, perfiles, invitaciones, roles contextuales, selección de empresa.
+- contacts: contactos unificados (clientes y proveedores), validaciones fiscales básicas (CC, NIT con DV), direcciones flexibles.
+- products: catálogo de productos, variantes, stocks por PDV, imágenes con MinIO.
+- invoices: facturas de venta y POS, pagos asociados, secuencias por PDV.
+- bills: compras y pagos a proveedores.
+- files: integración con MinIO, generación de presigned URLs.
+- pos/pdv: modelos y endpoints de punto de venta y vendedores.
+- common/core/database/dependencies: utilidades, configuración, Celery, conexión DB, inyección de dependencias.
 
-### Aceptar invitación
-```http
-POST /auth/accept-invitation
-{
-  "token": "invitation-token-from-email",
-  "password": "newpassword123",
-  "profile": {
-    "first_name": "María",
-    "last_name": "García"
-  }
-}
-```
-
-## Estructura del proyecto
+## Estructura del repositorio
 
 ```
 app/
-├── common/          # Mixins, middleware compartido
-├── core/            # Configuración, Celery
-├── database/        # Conexión DB, migraciones
-├── modules/
-│   ├── auth/        # Autenticación completa
-│   ├── company/     # Gestión de empresas
-│   ├── email/       # Sistema de correos
-│   ├── files/       # Gestión de archivos
-│   ├── products/    # Productos
-│   └── ...
-├── dependencies/    # Inyección de dependencias
-└── main.py         # App principal
+  common/
+  core/
+  database/
+  dependencies/
+  modules/
+    auth/
+    contacts/
+    products/
+    invoices/
+    bills/
+    files/
+    pos/
+    inventory/
+    ...
+  main.py
+alembic/
+  env.py
+  versions/
+docker/
+docker-compose.yml
+migrate.py
+requirements.txt
 ```
 
-## Desarrollo rápido
+## Puesta en marcha (Docker)
 
-### 1. Configuración inicial
-```bash
+Requisitos
+- Docker y Docker Compose instalados.
+
+Pasos
+```
 git clone <repository>
 cd ally360-api
-cp .env.example .env
-# Editar .env con tus configuraciones de email
+cp .env.example .env   # Ajusta credenciales y secretos
+docker compose up --build
 ```
 
-### 2. Ejecutar con Docker
-```bash
-docker-compose up --build
+Servicios expuestos
+- API: http://localhost:8000
+- Documentación OpenAPI: http://localhost:8000/docs
+- PostgreSQL: puerto 5432 (contenedor postgres)
+- Redis: puerto 6379
+- MinIO API: http://localhost:9000
+- MinIO Console: http://localhost:9001
+
+## Migraciones de base de datos (Alembic)
+
+Este proyecto incluye un helper `migrate.py`.
+
+Aplicar migraciones pendientes
+```
+docker compose exec api python migrate.py upgrade
 ```
 
-### 3. Generar migración inicial
-```bash
-# Una vez que los containers estén corriendo
-docker-compose exec app python migrate.py create "Initial migration"
-docker-compose exec app python migrate.py upgrade
+Crear una nueva migración (autogenerada)
+```
+docker compose exec api python migrate.py create "<mensaje>"
 ```
 
-## Servicios incluidos
+Revertir la última migración
+```
+docker compose exec api python migrate.py downgrade
+```
 
-- **API**: http://localhost:8000
-- **Docs**: http://localhost:8000/docs  
-- **PostgreSQL**: puerto 5432
-- **Redis**: puerto 6379
-- **MinIO**: http://localhost:9000 (Console: http://localhost:9001)
-- **Celery Worker**: procesamiento en background
+Nota: Las migraciones deben revisarse antes de aplicar en producción.
 
-## Templates de email
+## Variables de entorno
 
-Los templates están en `app/modules/email/templates/`. Son placeholders básicos listos para reemplazar con tus diseños:
+Base de datos y servicios
+```
+POSTGRES_USER=ally_user
+POSTGRES_PASSWORD=ally_pass
+POSTGRES_DB=ally_db
+POSTGRES_HOST=postgres
+REDIS_HOST=redis
+```
 
-- `verification_email.html` - Verificación de cuenta
-- `invitation_email.html` - Invitaciones a empresas  
-- `password_reset_email.html` - Restablecimiento de contraseña
+JWT y seguridad
+```
+APP_SECRET_STRING=cambia-esta-clave-en-produccion
+ALGORITHM=HS256
+```
 
-Variables disponibles en cada template documentadas en los archivos.
+MinIO
+```
+MINIO_HOST=minio
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_PUBLIC_HOST=localhost
+MINIO_PUBLIC_PORT=9000
+```
 
-## Variables de entorno clave
-
-```env
-# Email (requerido para funcionalidad completa)
+Email (opcional, para flujos de verificación e invitación)
+```
 EMAIL_SMTP_SERVER=smtp.gmail.com
 EMAIL_USERNAME=tu-email@gmail.com
 EMAIL_PASSWORD=tu-app-password
 EMAIL_FROM=tu-email@gmail.com
 FRONTEND_URL=http://localhost:3000
-
-# JWT
-APP_SECRET_STRING=cambia-esta-clave-en-produccion
-
-# Base de datos y servicios (ya configurados para Docker)
-POSTGRES_USER=ally_user
-POSTGRES_PASSWORD=ally_pass
-# ... resto de configuraciones
 ```
 
-## Próximos pasos
+## Flujo de autenticación
 
-1. **Configurar email SMTP** en `.env`
-2. **Reemplazar templates** de email con tus diseños
-3. **Ejecutar primera migración**
-4. **Probar flujo completo** de registro → verificación → login → selección empresa
+Registro y verificación
+```
+POST /auth/register
+POST /auth/verify-email
+```
 
-## API Endpoints principales
+Login y selección de empresa
+```
+POST /auth/login
+POST /auth/select-company    # devuelve token de contexto con tenant
+```
 
-- `POST /auth/register` - Registro con empresa
-- `POST /auth/login` - Login multi-empresa
-- `POST /auth/select-company` - Contexto de empresa
-- `POST /auth/invite-user` - Invitar usuarios
-- `GET /products/` - Productos (requiere tenant)
-- `POST /files/upload` - Subir archivos
-- Y muchos más en `/docs`
+Uso con contexto
+```
+Authorization: Bearer <context-token>
+X-Company-ID: <uuid-empresa>   # alternativa para selección de tenant
+```
 
-## 📄 Licencia
+## Manejo de archivos (MinIO)
 
-Proyecto privado bajo desarrollo. Todos los derechos reservados © Ally360.
+- Bucket único por entorno (por ejemplo, ally360).
+- Claves con prefijos: `ally360/{tenant_id}/{module}/{yyyy}/{mm}/{dd}/{uuid}`.
+- Todas las subidas/descargas se hacen por presigned URLs; nunca se expone el archivo directamente.
+- Se guardan metadatos en base de datos (tabla files o equivalente por feature).
+- El backend genera URLs prefirmadas usando el host público configurado (`MINIO_PUBLIC_HOST` y `MINIO_PUBLIC_PORT`).
+
+## Tareas y cache (Celery/Redis)
+
+- Celery para trabajos en background: emails, procesamiento de archivos, reportes.
+- Redis como broker y caché para roles y rate limiting por tenant.
+
+## Guía de desarrollo y estándares
+
+- Multi-tenant obligatorio: siempre incluir y filtrar por `tenant_id`.
+- Arquitectura por capas: router → service → crud → models → schemas.
+- Pydantic v2 para validación estricta de entrada y salida.
+- Consultas grandes con paginación (limit/offset o keyset).
+- Configurar GZip y tiempos de expiración de JWT adecuados.
+- Generar una migración de Alembic por cada cambio en modelos.
+
+## Testing y verificación
+
+- Pruebas unitarias para modelos y servicios.
+- Pruebas de integración multi-tenant (un tenant no debe ver los datos de otro).
+- Contract tests contra OpenAPI cuando aplique.
+
+Quality gates recomendados
+- Linter y type-check (pylance/mypy opcional).
+- Construcción sin errores.
+- Migraciones aplican sin conflictos.
+
+## Solución de problemas frecuentes
+
+Presigned URLs inaccesibles o con error de firma
+- Asegúrate de configurar `MINIO_PUBLIC_HOST=localhost` y `MINIO_PUBLIC_PORT=9000` para desarrollo.
+- Las URLs deben ser generadas usando el host público, no el nombre interno del contenedor.
+
+Error ARRAY.contains() no implementado
+- Usa `sqlalchemy.dialects.postgresql.ARRAY` en modelos para columnas array.
+
+Columna faltante después de agregar un campo en modelos
+- Crea y aplica una migración Alembic para reflejar el cambio en DB.
+
+Errores de autorización por empresa
+- Verifica que se envía `X-Company-ID` válido o que el token de contexto contiene `tenant_id`.
+
+## Licencia
+
+Proyecto privado en desarrollo. Todos los derechos reservados © Ally360.
