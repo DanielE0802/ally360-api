@@ -38,12 +38,12 @@ class PurchaseOrderStatus(enum.Enum):
 
 
 class BillStatus(enum.Enum):
-    """Estados de facturas de proveedor"""
-    DRAFT = "draft"         # Borrador (no afecta inventario)
-    OPEN = "open"           # Abierta/pendiente (afecta inventario)
-    PAID = "paid"           # Pagada completamente
-    PARTIAL = "partial"     # Pago parcial
-    VOID = "void"           # Anulada
+    """Estados de facturas de proveedor (normalizados en MAYÚSCULAS para coincidir con el tipo ENUM en PostgreSQL)"""
+    DRAFT = "DRAFT"         # Borrador (no afecta inventario)
+    OPEN = "OPEN"           # Abierta/pendiente (afecta inventario)
+    PAID = "PAID"           # Pagada completamente
+    PARTIAL = "PARTIAL"     # Pago parcial
+    VOID = "VOID"           # Anulada
 
 
 class PaymentMethod(enum.Enum):

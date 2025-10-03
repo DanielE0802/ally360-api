@@ -1,3 +1,33 @@
+from app.modules.products.schemas import LowStockProduct, LowStockResponse
+async def get_low_stock_products(db, tenant_id: str) -> LowStockResponse:
+    """Return products with stock below min_stock for the tenant."""
+    from sqlalchemy import select, and_
+    from app.modules.products.models import Product
+    from app.modules.inventory.models import Stock
+    from app.modules.pdv.models import PDV
+
+    query = (
+        select(Product, Stock, PDV)
+        .join(Stock, Stock.product_id == Product.id)
+        .join(PDV, Stock.pdv_id == PDV.id)
+        .where(
+            Product.tenant_id == tenant_id,
+            Stock.current_stock <= Stock.min_stock
+        )
+    )
+    result = await db.execute(query)
+    items = []
+    for product, stock, pdv in result.fetchall():
+        items.append(LowStockProduct(
+            id=str(product.id),
+            name=product.name,
+            sku=product.sku,
+            current_stock=stock.current_stock,
+            min_stock=stock.min_stock,
+            pdv_id=str(pdv.id),
+            pdv_name=pdv.name
+        ))
+    return LowStockResponse(products=items, total_count=len(items))
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
@@ -233,13 +263,42 @@ async def get_products(
         has_next = (offset + limit) < total
         has_prev = page > 1
         
+        # Métricas/Metadatos para filtros (conteos rápidos por estado activo)
+        # Nota: productos no tienen estados múltiples como invoices/bills; exponemos conteos por is_active si aplica
+        counts_by_status = []
+        for active_state in [True, False]:
+            base_q = select(func.count()).select_from(Product).where(Product.tenant_id == tenant_uuid)
+            # aplicar mismos filtros excepto is_active y paginación
+            if search:
+                base_q = base_q.where(
+                    or_(
+                        Product.name.ilike(f"%{search}%"),
+                        Product.sku.ilike(f"%{search}%"),
+                        Product.description.ilike(f"%{search}%")
+                    )
+                )
+            if category_id:
+                base_q = base_q.where(Product.category_id == UUID(category_id))
+            if brand_id:
+                base_q = base_q.where(Product.brand_id == UUID(brand_id))
+            base_q = base_q.where(Product.is_active == active_state)
+            count_res = await db.execute(base_q)
+            counts_by_status.append({"status": "ACTIVE" if active_state else "INACTIVE", "count": count_res.scalar() or 0})
+
         return {
             "data": product_data,
             "total": total,
             "page": page,
             "limit": limit,
             "hasNext": has_next,
-            "hasPrev": has_prev
+            "hasPrev": has_prev,
+            "applied_filters": {
+                "search": search,
+                "category_id": category_id,
+                "brand_id": brand_id,
+                "is_active": is_active,
+            },
+            "counts_by_status": counts_by_status
         }
         
     except Exception as e:
@@ -769,7 +828,14 @@ def get_all_products(db: Session, tenant_id: UUID, **kwargs):
         "page": page,
         "limit": limit,
         "hasNext": has_next,
-        "hasPrev": has_prev
+        "hasPrev": has_prev,
+        "applied_filters": {
+            "category_id": str(category_id) if category_id else None,
+            "brand_id": str(brand_id) if brand_id else None,
+            "name": name,
+            "is_active": is_active,
+        },
+        "counts_by_status": []  # Sin estados múltiples aquí; dejamos arreglo vacío por compatibilidad
     }
 
 def get_product_by_id(db: Session, tenant_id: UUID, product_id: UUID):

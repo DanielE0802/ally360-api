@@ -33,7 +33,8 @@ from app.modules.bills.schemas import (
     BillCreate, BillUpdate, BillList, BillDetail,
     BillPaymentCreate, BillPaymentList,
     DebitNoteCreate, DebitNoteUpdate, DebitNoteList, DebitNoteDetail,
-    ConvertPOToBillRequest
+    ConvertPOToBillRequest,
+    BillsMonthlySummary, BillMonthlyStatusMetrics, StatusCount
 )
 
 from app.modules.contacts.models import Contact, ContactType
@@ -187,8 +188,19 @@ class PurchaseOrderService:
             if pdv_id:
                 query = query.filter(PurchaseOrder.pdv_id == pdv_id)
             
+            from sqlalchemy.orm import selectinload
+            query = query.options(selectinload(PurchaseOrder.supplier))
             total = query.count()
             purchase_orders = query.order_by(PurchaseOrder.created_at.desc()).offset(offset).limit(limit).all()
+            for po in purchase_orders:
+                try:
+                    sup = getattr(po, 'supplier', None)
+                    if sup is not None and getattr(sup, 'name', None):
+                        setattr(po, 'supplier_name', sup.name)
+                    if sup is not None and getattr(sup, 'email', None):
+                        setattr(po, 'supplier_email', sup.email)
+                except Exception:
+                    pass
             
             return PurchaseOrderList(
                 items=purchase_orders,
@@ -314,6 +326,19 @@ class BillService:
             ProviderValidator(self.db).require_provider(bill_data.supplier_id, tenant_id)
 
             # Crear factura
+            # Mapear estado de schema (string/Enum) al Enum del modelo (mayúsculas)
+            incoming_status = bill_data.status
+            if hasattr(incoming_status, 'value'):
+                status_str = incoming_status.value
+            else:
+                status_str = str(incoming_status)
+            from app.modules.bills.models import BillStatus as ModelBillStatus
+            try:
+                status_value = ModelBillStatus(status_str)
+            except ValueError:
+                # Intentar normalizando a mayúsculas (soporta payloads en minúsculas)
+                status_value = ModelBillStatus(status_str.upper())
+
             bill = Bill(
                 supplier_id=bill_data.supplier_id,
                 pdv_id=bill_data.pdv_id,
@@ -322,7 +347,7 @@ class BillService:
                 due_date=bill_data.due_date,
                 currency=bill_data.currency,
                 notes=bill_data.notes,
-                status=bill_data.status,
+                status=status_value,
                 tenant_id=tenant_id,
                 created_by=user_id
             )
@@ -447,7 +472,8 @@ class BillService:
     ) -> BillList:
         """Listar facturas con filtros"""
         try:
-            query = self.db.query(Bill).filter(Bill.tenant_id == tenant_id)
+            from sqlalchemy.orm import selectinload
+            query = self.db.query(Bill).options(selectinload(Bill.supplier)).filter(Bill.tenant_id == tenant_id)
             
             if status:
                 query = query.filter(Bill.status == status)
@@ -462,12 +488,48 @@ class BillService:
             
             total = query.count()
             bills = query.order_by(Bill.created_at.desc()).offset(offset).limit(limit).all()
-            
+            # Enriquecer con supplier_name
+            for b in bills:
+                try:
+                    sup = getattr(b, 'supplier', None)
+                    if sup is not None and getattr(sup, 'name', None):
+                        setattr(b, 'supplier_name', sup.name)
+                    if sup is not None and getattr(sup, 'email', None):
+                        setattr(b, 'supplier_email', sup.email)
+                except Exception:
+                    pass
+
+            # Conteos por estado respetando otros filtros (rango fechas, proveedor, pdv)
+            counts_by_status = []
+            for st in [BillStatus.DRAFT, BillStatus.OPEN, BillStatus.PARTIAL, BillStatus.PAID, BillStatus.VOID]:
+                base_q = self.db.query(Bill).filter(Bill.tenant_id == tenant_id)
+                if supplier_id:
+                    base_q = base_q.filter(Bill.supplier_id == supplier_id)
+                if pdv_id:
+                    base_q = base_q.filter(Bill.pdv_id == pdv_id)
+                if start_date:
+                    base_q = base_q.filter(Bill.issue_date >= start_date)
+                if end_date:
+                    base_q = base_q.filter(Bill.issue_date <= end_date)
+                count = base_q.filter(Bill.status == st).count()
+                counts_by_status.append({"status": st, "count": count})
+
+            # Filtros aplicados devueltos para la UI
+            applied_filters = {
+                "status": status.name if status else None,
+                "supplier_id": str(supplier_id) if supplier_id else None,
+                "pdv_id": str(pdv_id) if pdv_id else None,
+                "start_date": str(start_date) if start_date else None,
+                "end_date": str(end_date) if end_date else None,
+            }
+
             return BillList(
                 items=bills,
                 total=total,
                 limit=limit,
-                offset=offset
+                offset=offset,
+                applied_filters=applied_filters,
+                counts_by_status=counts_by_status
             )
             
         except Exception as e:
@@ -583,6 +645,77 @@ class BillService:
         except Exception as e:
             self.db.rollback()
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error anulando factura: {str(e)}")
+
+    def get_monthly_status_summary(self, tenant_id: UUID, year: int, month: int) -> BillsMonthlySummary:
+        """
+        Resumen mensual de bills por estado. Incluye:
+        - total: conteo, suma de total_amount y suma de paid_amount (recaudado)
+        - métricas por estado (DRAFT, OPEN, PARTIAL, PAID, VOID)
+        - counts_by_status: arreglo de {status, count} para visualizaciones rápidas
+        """
+        try:
+            from datetime import date
+            if month < 1 or month > 12:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mes inválido. Debe estar entre 1 y 12")
+            month_start = date(year, month, 1)
+            next_month = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+
+            base_q = self.db.query(Bill).filter(
+                Bill.tenant_id == tenant_id,
+                Bill.issue_date >= month_start,
+                Bill.issue_date < next_month
+            )
+
+            # Totales globales
+            total_count = base_q.count()
+            total_amount = self.db.query(func.coalesce(func.sum(Bill.total_amount), 0)).filter(
+                Bill.tenant_id == tenant_id,
+                Bill.issue_date >= month_start,
+                Bill.issue_date < next_month
+            ).scalar() or 0
+            total_recaudado = self.db.query(func.coalesce(func.sum(Bill.paid_amount), 0)).filter(
+                Bill.tenant_id == tenant_id,
+                Bill.issue_date >= month_start,
+                Bill.issue_date < next_month
+            ).scalar() or 0
+
+            def metrics_for(status_value: BillStatus) -> BillMonthlyStatusMetrics:
+                q = base_q.filter(Bill.status == status_value)
+                count = q.count()
+                amount = self.db.query(func.coalesce(func.sum(Bill.total_amount), 0)).filter(
+                    Bill.tenant_id == tenant_id,
+                    Bill.issue_date >= month_start,
+                    Bill.issue_date < next_month,
+                    Bill.status == status_value
+                ).scalar() or 0
+                recaudado = self.db.query(func.coalesce(func.sum(Bill.paid_amount), 0)).filter(
+                    Bill.tenant_id == tenant_id,
+                    Bill.issue_date >= month_start,
+                    Bill.issue_date < next_month,
+                    Bill.status == status_value
+                ).scalar() or 0
+                return BillMonthlyStatusMetrics(count=count, total=amount, recaudado=recaudado)
+
+            counts_by_status: List[StatusCount] = []
+            for st in [BillStatus.DRAFT, BillStatus.OPEN, BillStatus.PARTIAL, BillStatus.PAID, BillStatus.VOID]:
+                cnt = base_q.filter(Bill.status == st).count()
+                counts_by_status.append(StatusCount(status=st, count=cnt))
+
+            return BillsMonthlySummary(
+                year=year,
+                month=month,
+                total=BillMonthlyStatusMetrics(count=total_count, total=total_amount, recaudado=total_recaudado),
+                draft=metrics_for(BillStatus.DRAFT),
+                open=metrics_for(BillStatus.OPEN),
+                partial=metrics_for(BillStatus.PARTIAL),
+                paid=metrics_for(BillStatus.PAID),
+                void=metrics_for(BillStatus.VOID),
+                counts_by_status=counts_by_status
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error generando resumen mensual de bills: {str(e)}")
 
 
 class BillPaymentService:
@@ -877,8 +1010,19 @@ class DebitNoteService:
             if end_date:
                 query = query.filter(DebitNote.issue_date <= end_date)
             
+            from sqlalchemy.orm import selectinload
+            query = query.options(selectinload(DebitNote.supplier))
             total = query.count()
             debit_notes = query.order_by(DebitNote.created_at.desc()).offset(offset).limit(limit).all()
+            for dn in debit_notes:
+                try:
+                    sup = getattr(dn, 'supplier', None)
+                    if sup is not None and getattr(sup, 'name', None):
+                        setattr(dn, 'supplier_name', sup.name)
+                    if sup is not None and getattr(sup, 'email', None):
+                        setattr(dn, 'supplier_email', sup.email)
+                except Exception:
+                    pass
             
             return DebitNoteList(
                 items=debit_notes,

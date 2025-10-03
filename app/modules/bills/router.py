@@ -33,7 +33,8 @@ from app.modules.bills.schemas import (
     # Payment schemas
     BillPaymentCreate, BillPaymentOut, BillPaymentList,
     # Debit Note schemas
-    DebitNoteCreate, DebitNoteOut, DebitNoteList, DebitNoteDetail
+    DebitNoteCreate, DebitNoteOut, DebitNoteList, DebitNoteDetail,
+    BillsMonthlySummary
 )
 
 # Router principal para el módulo Bills
@@ -229,6 +230,20 @@ def void_bill(
     """
     service = BillService(db)
     return service.void_bill(bill_id, void_data.reason, auth_context.tenant_id)
+
+
+@bills_router.get("/reports/monthly-status", response_model=BillsMonthlySummary, tags=["Bills"])
+def get_bills_monthly_status(
+    year: int = Query(..., ge=2000, le=2100, description="Año, ej. 2025"),
+    month: int = Query(..., ge=1, le=12, description="Mes (1-12)"),
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
+):
+    """
+    Resumen mensual por estado para Bills, incluyendo arreglo counts_by_status.
+    """
+    service = BillService(db)
+    return service.get_monthly_status_summary(auth_context.tenant_id, year, month)
 
 
 # ===== BILL PAYMENTS ENDPOINTS =====

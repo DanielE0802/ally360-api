@@ -10,17 +10,17 @@ import enum
 
 
 class InvoiceType(enum.Enum):
-    SALE = "sale"    # Facturas regulares de venta
-    POS = "pos"      # Ventas POS (punto de venta)
+    SALE = "SALE"    # Facturas regulares de venta
+    POS = "POS"      # Ventas POS (punto de venta)
     # PURCHASE = "purchase"  # Para futuro
     # EXPENSE = "expense"    # Para futuro
 
 
 class InvoiceStatus(enum.Enum):
-    DRAFT = "draft"      # Borrador, no afecta inventario
-    OPEN = "open"        # Abierta, afecta inventario, pendiente de pago
-    PAID = "paid"        # Pagada completamente
-    VOID = "void"        # Anulada
+    DRAFT = "DRAFT"      # Borrador, no afecta inventario
+    OPEN = "OPEN"        # Abierta, afecta inventario, pendiente de pago
+    PAID = "PAID"        # Pagada completamente
+    VOID = "VOID"        # Anulada
 
 
 class PaymentMethod(enum.Enum):
@@ -117,6 +117,7 @@ class Payment(Base, TenantMixin, TimestampMixin):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), nullable=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
     amount = Column(Numeric(15, 2), nullable=False)
     method = Column(Enum(PaymentMethod), nullable=False)
@@ -126,6 +127,7 @@ class Payment(Base, TenantMixin, TimestampMixin):
     
     # Relationships
     invoice = relationship("Invoice", back_populates="payments")
+    created_by_user = relationship("User")
 
     __table_args__ = (
         # Los pagos no pueden ser negativos

@@ -22,13 +22,15 @@ from app.modules.products.schemas import (
     PaginatedProductPDVResponse,
     ProductImageCreate,
     ProductImageOut,
-    ImageUploadResponse
+    ImageUploadResponse,
+    LowStockResponse
 )
 from app.modules.inventory.service import InventoryService
 from app.modules.taxes.service import TaxService
 from app.modules.taxes.schemas import TaxCalculation
 
 product_router = APIRouter(prefix="/products", tags=["Products"])
+
 
 @product_router.post("/", response_model=ProductOut)
 def create_product(
@@ -98,6 +100,22 @@ async def list_products(
         category_id=category_id,
         brand_id=brand_id,
         is_active=is_active
+
+@product_router.get("/stock", response_model=LowStockResponse)
+async def low_stock_products(
+    db: AsyncSession = Depends(get_async_db),
+    auth_context: AuthContext = Depends(AuthDependencies.require_any_role()),
+    low_stock: bool = Query(False, description="Solo productos con stock crítico"),
+):
+    """Get products with low stock for the tenant."""
+    if not auth_context.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Company context required"
+        )
+    if not low_stock:
+        return LowStockResponse(products=[], total_count=0)
+    return await service.get_low_stock_products(db=db, tenant_id=str(auth_context.tenant_id))
     )
 
 @product_router.get("/{product_id}", response_model=GetProductResponse)
@@ -128,7 +146,6 @@ def update_product(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Company context required"
         )
-    
     return service.update_product(db, auth_context.tenant_id, product_id, data)
 
 @product_router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)

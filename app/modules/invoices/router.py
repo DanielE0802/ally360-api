@@ -1,4 +1,28 @@
-from fastapi import APIRouter, Depends, status, Query, HTTPException, BackgroundTasks
+from app.modules.invoices.schemas import TopProductsResponse, SalesComparison
+from app.modules.invoices.service import get_top_products, get_sales_comparison
+# --- REPORTES Y ESTADÍSTICAS ---
+
+@router.get("/reports/top-products", response_model=TopProductsResponse)
+async def get_top_products_endpoint(
+    period: str = Query("month", description="Periodo: day, week, month"),
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
+):
+    """
+    Top-selling products for the tenant in the given period.
+    """
+    return await get_top_products(db=db, tenant_id=auth_context.tenant_id, period=period)
+
+@router.get("/reports/comparison", response_model=SalesComparison)
+async def get_sales_comparison_endpoint(
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
+):
+    """
+    Sales comparison (today vs yesterday) for the tenant.
+    """
+    return await get_sales_comparison(db=db, tenant_id=auth_context.tenant_id)
+from fastapi import APIRouter, Depends, status, Query, HTTPException, BackgroundTasks, File, UploadFile, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -12,8 +36,9 @@ from app.modules.auth.dependencies import AuthDependencies
 from app.modules.invoices.service import InvoiceService
 from app.modules.invoices.schemas import (
     InvoiceCreate, InvoiceOut, InvoiceDetail, InvoiceList, 
-    PaymentCreate, PaymentOut, InvoiceEmailRequest,
-    InvoiceUpdate, InvoiceCancelRequest, InvoiceFilters, InvoiceStatus
+    PaymentCreate, PaymentOut, InvoiceEmailRequest, InvoiceEmailResponse,
+    InvoiceUpdate, InvoiceCancelRequest, InvoiceFilters, InvoiceStatus,
+    InvoicesMonthlySummary
 )
 
 # Router principal del módulo de facturas
@@ -160,56 +185,53 @@ def get_invoice_payments(
     return service.get_invoice_payments(invoice_id, auth_context.tenant_id)
 
 
-# --- PDF Y EMAIL ---
+# --- EMAIL ---
 
-@router.get("/{invoice_id}/pdf")
-def download_invoice_pdf(
+@router.post("/{invoice_id}/send-email", response_model=InvoiceEmailResponse, status_code=status.HTTP_202_ACCEPTED)
+async def send_invoice_email(
     invoice_id: UUID,
-    db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant", "viewer"]))
-):
-    """
-    Descargar factura en formato PDF
-    
-    Genera el PDF dinámicamente y lo retorna como descarga.
-    """
-    service = InvoiceService(db)
-    
-    # Verificar que la factura existe y pertenece al tenant
-    invoice = service.get_invoice_by_id(invoice_id, auth_context.tenant_id)
-    
-    # TODO: Implementar generación de PDF
-    # Por ahora retornamos un placeholder
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="PDF generation not implemented yet"
-    )
-
-
-@router.post("/{invoice_id}/email")
-def send_invoice_email(
-    invoice_id: UUID,
-    email_data: InvoiceEmailRequest,
-    background_tasks: BackgroundTasks,
+    to_email: str = Form(..., description="Email del destinatario"),
+    subject: Optional[str] = Form(None, description="Asunto personalizado"),
+    message: Optional[str] = Form(None, description="Mensaje personalizado"),
+    pdf_file: UploadFile = File(..., description="Archivo PDF de la factura"),
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant"]))
 ):
     """
-    Enviar factura por email
+    Enviar factura por email con PDF adjunto.
     
-    Envía la factura en PDF al email especificado usando tareas en background.
+    Recibe el PDF generado desde el frontend y lo envía por email
+    usando tareas asíncronas de Celery.
     """
+    # Validar tipo de archivo
+    if not pdf_file.content_type or not pdf_file.content_type.startswith('application/pdf'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El archivo debe ser un PDF válido"
+        )
+    
+    # Validar tamaño del archivo (max 10MB)
+    max_size = 10 * 1024 * 1024  # 10MB
+    pdf_content = await pdf_file.read()
+    if len(pdf_content) > max_size:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="El archivo PDF es demasiado grande (máximo 10MB)"
+        )
+    
     service = InvoiceService(db)
     
-    # Verificar que la factura existe y pertenece al tenant
-    invoice = service.get_invoice_by_id(invoice_id, auth_context.tenant_id)
-    
-    # TODO: Implementar envío de email con Celery
-    # Por ahora retornamos un placeholder
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Email sending not implemented yet"
+    result = service.send_invoice_email(
+        invoice_id=invoice_id,
+        to_email=to_email,
+        pdf_content=pdf_content,
+        pdf_filename=pdf_file.filename or f"factura_{invoice_id}.pdf",
+        company_id=auth_context.tenant_id,
+        custom_message=message,
+        subject=subject
     )
+    
+    return result
 
 
 # --- REPORTES Y ESTADÍSTICAS ---
@@ -249,5 +271,23 @@ def get_next_invoice_number(
     """
     service = InvoiceService(db)
     return service.get_next_invoice_number(pdv_id, auth_context.tenant_id)
+
+
+@router.get("/reports/monthly-status", response_model=InvoicesMonthlySummary)
+def get_invoices_monthly_status(
+    year: int = Query(..., ge=2000, le=2100, description="Año, ej. 2025"),
+    month: int = Query(..., ge=1, le=12, description="Mes (1-12)"),
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
+):
+    """
+    Resumen mensual por estado para el tenant actual:
+    - total: número de facturas y recaudado del mes
+    - open:  número de facturas y recaudado de facturas OPEN
+    - paid:  número de facturas y recaudado de facturas PAID
+    - void:  número de facturas y recaudado de facturas VOID
+    """
+    service = InvoiceService(db)
+    return service.get_monthly_status_summary(auth_context.tenant_id, year, month)
 
 

@@ -8,14 +8,14 @@ from app.modules.contacts.schemas import ContactForInvoice
 
 
 class InvoiceType(str, Enum):
-    SALE = "sale"
+    SALE = "SALE"
 
 
 class InvoiceStatus(str, Enum):
-    DRAFT = "draft"
-    OPEN = "open"
-    PAID = "paid"
-    VOID = "void"
+    DRAFT = "DRAFT"
+    OPEN = "OPEN"
+    PAID = "PAID"
+    VOID = "VOID"
 
 
 class PaymentMethod(str, Enum):
@@ -140,6 +140,8 @@ class InvoiceOut(BaseModel):
     id: UUID
     pdv_id: UUID
     customer_id: UUID
+    customer_name: Optional[str] = None
+    customer_email: Optional[str] = None
     number: Optional[str]
     type: InvoiceType
     status: InvoiceStatus
@@ -175,6 +177,14 @@ class InvoiceList(BaseModel):
     total: int
     limit: int
     offset: int
+    # Nuevos campos para reflejar filtros aplicados y métricas por estado
+    applied_filters: Optional['InvoiceFilters'] = None
+    counts_by_status: List['InvoiceStatusCount'] = Field(default_factory=list)
+
+
+class InvoiceStatusCount(BaseModel):
+    status: InvoiceStatus
+    count: int
 
 
 # Payment Schemas
@@ -196,6 +206,7 @@ class PaymentCreate(BaseModel):
 class PaymentOut(BaseModel):
     id: UUID
     invoice_id: UUID
+    created_by: UUID
     amount: Decimal
     method: PaymentMethod
     reference: Optional[str]
@@ -257,6 +268,14 @@ class InvoiceFilters(BaseModel):
     search: Optional[str] = Field(None, description="Buscar en número, nombre del cliente o notas")
 
 
+# Email Response Schema
+class InvoiceEmailResponse(BaseModel):
+    """Respuesta del envío de email de factura"""
+    status: str = Field(..., description="Estado del envío: 'queued', 'success', 'failed'")
+    task_id: Optional[str] = Field(None, description="ID de la tarea de Celery")
+    message: str = Field(..., description="Mensaje descriptivo del resultado")
+
+
 # Validation Response Schemas
 class StockValidation(BaseModel):
     """Resultado de validación de stock"""
@@ -289,9 +308,19 @@ class InvoiceCancelRequest(BaseModel):
 
 
 class InvoiceEmailRequest(BaseModel):
-    to_email: str = Field(..., min_length=1, max_length=100)
-    subject: Optional[str] = None
-    message: Optional[str] = None
+    to_email: str = Field(..., min_length=1, max_length=100, description="Email del destinatario")
+    subject: Optional[str] = Field(None, max_length=200, description="Asunto personalizado del email")
+    message: Optional[str] = Field(None, max_length=1000, description="Mensaje adicional en el email")
+    pdf_filename: str = Field(..., min_length=1, max_length=255, description="Nombre del archivo PDF")
+
+    @field_validator('to_email')
+    @classmethod
+    def validate_email(cls, v):
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError('Email inválido')
+        return v
 
 
 class SalesSummary(BaseModel):
@@ -315,3 +344,24 @@ class NextInvoiceNumber(BaseModel):
 
 # Forward reference resolution
 InvoiceDetail.model_rebuild()
+
+
+# ===== Monthly Status Summary =====
+
+class MonthlyStatusMetrics(BaseModel):
+    """Métricas por estado para un período mensual"""
+    count: int
+    recaudado: Decimal
+
+
+class InvoicesMonthlySummary(BaseModel):
+    """Resumen mensual de facturas agrupado por estado"""
+    year: int
+    month: int
+    total: MonthlyStatusMetrics
+    open: MonthlyStatusMetrics
+    paid: MonthlyStatusMetrics
+    void: MonthlyStatusMetrics
+
+# Rebuild models with forward references for runtime
+InvoiceList.model_rebuild()

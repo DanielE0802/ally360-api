@@ -1,6 +1,18 @@
+class LowStockProduct(BaseModel):
+    id: str
+    name: str
+    sku: str
+    current_stock: int
+    min_stock: int
+    pdv_id: str
+    pdv_name: str
+
+class LowStockResponse(BaseModel):
+    products: List[LowStockProduct]
+    total_count: int
 from pydantic import BaseModel, Field
 from uuid import UUID
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Any, Dict
 from datetime import datetime
 
 # Schema base para paginación estándar
@@ -97,6 +109,8 @@ class GetProductResponse(BaseModel):
 class ProductListResponse(PaginatedResponse):
     """Respuesta paginada para lista de productos"""
     data: List[GetProductResponse]
+    applied_filters: Optional[Dict[str, Any]] = None
+    counts_by_status: List[Dict[str, Any]] = []
 
 # Schemas para crear/actualizar productos (mantener compatibilidad)
 class ProductCreate(BaseModel):
@@ -258,10 +272,14 @@ class ProductOutWithPdvs(BaseModel):
 class PaginatedProductResponse(PaginatedResponse):
     """Respuesta paginada para productos"""
     data: List[GetProductResponse]
+    applied_filters: Optional[Dict[str, Any]] = None
+    counts_by_status: List[Dict[str, Any]] = []
 
 class PaginatedProductPDVResponse(PaginatedResponse):
     """Respuesta paginada para productos con información por PDV"""
     data: List[ProductPDVResponse]
+    applied_filters: Optional[Dict[str, Any]] = None
+    counts_by_status: List[Dict[str, Any]] = []
 
 class ProductOutDefault(BaseModel):
     id: UUID

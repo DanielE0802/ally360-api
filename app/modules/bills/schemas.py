@@ -31,11 +31,12 @@ class PurchaseOrderStatus(str, Enum):
 
 
 class BillStatus(str, Enum):
-    DRAFT = "draft"
-    OPEN = "open"
-    PAID = "paid"
-    PARTIAL = "partial"
-    VOID = "void"
+    # Normalizado a MAYÚSCULAS para alinear con el ENUM en PostgreSQL/modelo
+    DRAFT = "DRAFT"
+    OPEN = "OPEN"
+    PAID = "PAID"
+    PARTIAL = "PARTIAL"
+    VOID = "VOID"
 
 
 class PaymentMethod(str, Enum):
@@ -180,6 +181,8 @@ class PurchaseOrderOut(PurchaseOrderBase):
     subtotal: Decimal
     taxes_total: Decimal
     total_amount: Decimal
+    supplier_name: Optional[str] = None
+    supplier_email: Optional[str] = None
     created_by: UUID
     created_at: datetime
     updated_at: datetime
@@ -255,6 +258,15 @@ class BillCreate(BillBase):
             raise ValueError('La fecha de vencimiento no puede ser anterior a la fecha de emisión')
         return self
 
+    # Permitir payloads con status en minúsculas (e.g., "open")
+    @field_validator('status', mode='before')
+    @classmethod
+    def normalize_status(cls, v):
+        if isinstance(v, str):
+            return v.upper()
+        # Enums o valores ya normalizados pasan directo
+        return v
+
 
 class BillUpdate(BaseModel):
     supplier_id: Optional[UUID] = None
@@ -274,6 +286,8 @@ class BillOut(BillBase):
     taxes_total: Decimal
     total_amount: Decimal
     paid_amount: Decimal
+    supplier_name: Optional[str] = None
+    supplier_email: Optional[str] = None
     created_by: UUID
     created_at: datetime
     updated_at: datetime
@@ -293,6 +307,9 @@ class BillList(BaseModel):
     total: int
     limit: int
     offset: int
+    # Nuevos campos para UI: filtros aplicados y conteos por estado
+    applied_filters: Optional[Dict[str, Any]] = None
+    counts_by_status: List[Dict[str, Any]] = []
 
 
 # ===== BILL PAYMENT SCHEMAS =====
@@ -414,6 +431,8 @@ class DebitNoteOut(DebitNoteBase):
     subtotal: Decimal
     taxes_total: Decimal
     total_amount: Decimal
+    supplier_name: Optional[str] = None
+    supplier_email: Optional[str] = None
     created_by: UUID
     created_at: datetime
     updated_at: datetime
@@ -442,6 +461,14 @@ class ConvertPOToBillRequest(BaseModel):
     issue_date: date = Field(default_factory=date.today, description="Fecha de la factura")
     due_date: Optional[date] = Field(None, description="Fecha de vencimiento")
     status: BillStatus = Field(BillStatus.DRAFT, description="Estado inicial de la factura")
+
+    # Permitir status en minúscula al convertir PO→Bill
+    @field_validator('status', mode='before')
+    @classmethod
+    def normalize_status(cls, v):
+        if isinstance(v, str):
+            return v.upper()
+        return v
     notes: Optional[str] = Field(None, description="Notas adicionales para la factura")
 
 
@@ -452,3 +479,31 @@ class BillStatusUpdate(BaseModel):
 
 # Forward references
 BillDetail.model_rebuild()
+
+
+# ===== Monthly Status Summary (Reports) =====
+
+class BillMonthlyStatusMetrics(BaseModel):
+    """Métricas por estado para un período mensual de bills"""
+    count: int
+    total: Decimal  # Suma de total_amount
+    recaudado: Decimal  # Suma de paid_amount
+
+
+class StatusCount(BaseModel):
+    """Conteo por estado (para arreglo de totales por estado)"""
+    status: BillStatus
+    count: int
+
+
+class BillsMonthlySummary(BaseModel):
+    """Resumen mensual de bills agrupado por estado + arreglo de conteos"""
+    year: int
+    month: int
+    total: BillMonthlyStatusMetrics
+    open: BillMonthlyStatusMetrics
+    paid: BillMonthlyStatusMetrics
+    partial: BillMonthlyStatusMetrics
+    void: BillMonthlyStatusMetrics
+    draft: BillMonthlyStatusMetrics
+    counts_by_status: List[StatusCount]

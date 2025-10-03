@@ -110,7 +110,9 @@ class EmailService:
             True si se envió correctamente, False en caso contrario
         """
         try:
-            msg = MIMEMultipart('alternative')
+            # Usar 'mixed' si hay adjuntos, 'alternative' si solo hay texto/html
+            msg_type = 'mixed' if attachments else 'alternative'
+            msg = MIMEMultipart(msg_type)
             msg['Subject'] = subject
             msg['From'] = f"{self.from_name} <{self.from_email}>"
             msg['To'] = ', '.join(to_emails)
@@ -118,27 +120,52 @@ class EmailService:
             if cc_emails:
                 msg['Cc'] = ', '.join(cc_emails)
             
-            if text_content:
-                text_part = MIMEText(text_content, 'plain', 'utf-8')
-                msg.attach(text_part)
-            
-            if html_content:
-                html_part = MIMEText(html_content, 'html', 'utf-8')
-                msg.attach(html_part)
+            # Si hay adjuntos, crear una parte interna para texto/html
+            if attachments and (text_content or html_content):
+                text_msg = MIMEMultipart('alternative')
+                
+                if text_content:
+                    text_part = MIMEText(text_content, 'plain', 'utf-8')
+                    text_msg.attach(text_part)
+                
+                if html_content:
+                    html_part = MIMEText(html_content, 'html', 'utf-8')
+                    text_msg.attach(html_part)
+                
+                msg.attach(text_msg)
+            else:
+                # Sin adjuntos, agregar contenido directamente
+                if text_content:
+                    text_part = MIMEText(text_content, 'plain', 'utf-8')
+                    msg.attach(text_part)
+                
+                if html_content:
+                    html_part = MIMEText(html_content, 'html', 'utf-8')
+                    msg.attach(html_part)
             
             if attachments:
+                logger.info(f"Processing {len(attachments)} attachments")
                 for file_path in attachments:
+                    logger.info(f"Processing attachment: {file_path}")
                     if os.path.isfile(file_path):
+                        file_size = os.path.getsize(file_path)
+                        logger.info(f"Attachment file exists and has size: {file_size} bytes")
+                        
                         with open(file_path, "rb") as attachment:
-                            part = MIMEBase('application', 'octet-stream')
+                            part = MIMEBase('application', 'pdf')  # Especificar PDF correctamente
                             part.set_payload(attachment.read())
                         
                         encoders.encode_base64(part)
                         part.add_header(
                             'Content-Disposition',
-                            f'attachment; filename= {os.path.basename(file_path)}'
+                            f'attachment; filename="{os.path.basename(file_path)}"'  # Agregar comillas
                         )
                         msg.attach(part)
+                        logger.info(f"Attachment {os.path.basename(file_path)} added to email")
+                    else:
+                        logger.error(f"Attachment file does not exist: {file_path}")
+            else:
+                logger.info("No attachments to process")
             
             with self._create_smtp_connection() as server:
                 all_recipients = to_emails[:]

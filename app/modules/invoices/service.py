@@ -1,3 +1,76 @@
+from app.modules.invoices.schemas import TopProduct, TopProductsResponse, SalesComparison
+from sqlalchemy import select, func, cast, String
+from datetime import date, timedelta
+async def get_top_products(db, tenant_id: str, period: str = "month") -> TopProductsResponse:
+    """Return top-selling products for the tenant in the given period."""
+    # Example: group by product, sum quantity and amount
+    from app.modules.invoices.models import Invoice, InvoiceItem
+    from app.modules.products.models import Product
+    today = date.today()
+    if period == "day":
+        start = today
+    elif period == "week":
+        start = today - timedelta(days=today.weekday())
+    else:
+        start = today.replace(day=1)
+    query = (
+        select(
+            Product.id,
+            Product.name,
+            Product.sku,
+            func.sum(InvoiceItem.quantity).label("total_quantity"),
+            func.sum(InvoiceItem.total).label("total_amount")
+        )
+        .join(InvoiceItem, InvoiceItem.product_id == Product.id)
+        .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
+        .where(
+            Invoice.tenant_id == tenant_id,
+            Invoice.date >= start,
+            Invoice.date <= today
+        )
+        .group_by(Product.id, Product.name, Product.sku)
+        .order_by(func.sum(InvoiceItem.quantity).desc())
+        .limit(10)
+    )
+    result = await db.execute(query)
+    products = []
+    for pid, name, sku, qty, amount in result.fetchall():
+        products.append(TopProduct(
+            product_id=str(pid),
+            product_name=name,
+            sku=sku,
+            total_quantity=qty,
+            total_amount=str(amount)
+        ))
+    return TopProductsResponse(products=products, period=period)
+
+async def get_sales_comparison(db, tenant_id: str) -> SalesComparison:
+    """Return sales comparison today vs yesterday for the tenant."""
+    from app.modules.invoices.models import Invoice
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    # Sum total for today
+    q_today = select(func.coalesce(func.sum(Invoice.total), 0)).where(
+        Invoice.tenant_id == tenant_id,
+        Invoice.date == today
+    )
+    # Sum total for yesterday
+    q_yesterday = select(func.coalesce(func.sum(Invoice.total), 0)).where(
+        Invoice.tenant_id == tenant_id,
+        Invoice.date == yesterday
+    )
+    res_today = await db.execute(q_today)
+    res_yesterday = await db.execute(q_yesterday)
+    total_today = res_today.scalar()
+    total_yesterday = res_yesterday.scalar()
+    pct = ((total_today - total_yesterday) / total_yesterday * 100) if total_yesterday else 100.0 if total_today else 0.0
+    amt = total_today - total_yesterday
+    return SalesComparison(
+        today={"date": str(today), "total": str(total_today)},
+        yesterday={"date": str(yesterday), "total": str(total_yesterday)},
+        percentage_change=pct,
+        amount_change=str(amt)
+    )
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
@@ -6,6 +79,7 @@ from decimal import Decimal
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import date, datetime
+import logging
 
 from app.modules.invoices.models import (
     Invoice, InvoiceLineItem, Payment, InvoiceSequence,
@@ -13,10 +87,13 @@ from app.modules.invoices.models import (
 )
 from app.modules.invoices.schemas import (
     InvoiceCreate, InvoiceUpdate, PaymentCreate,
-    InvoiceFilters, StockValidation, InvoiceValidation, InvoiceTaxSummary, InvoiceTotals
+    InvoiceFilters, StockValidation, InvoiceValidation, InvoiceTaxSummary, InvoiceTotals,
+    InvoicesMonthlySummary, MonthlyStatusMetrics
 )
 from app.modules.products.models import Product, Stock, InventoryMovement, ProductTax, Tax
 from app.modules.pdv.models import PDV
+
+logger = logging.getLogger(__name__)
 
 
 ## CustomerService removed in favor of Contacts module
@@ -53,6 +130,9 @@ class InvoiceService:
             if not customer or (customer.type and 'client' not in customer.type):
                 errors.append("El cliente especificado no existe, no pertenece a esta empresa o no es de tipo 'client'")
             
+            # Ahora los enums coinciden, podemos usar directamente el valor
+            incoming_status = invoice_data.status
+
             # Validar productos y stock
             for item in invoice_data.items:
                 product = self.db.query(Product).filter(
@@ -65,7 +145,7 @@ class InvoiceService:
                     continue
                 
                 # Validar stock solo si el status será 'open'
-                if invoice_data.status == InvoiceStatus.OPEN:
+                if incoming_status == InvoiceStatus.OPEN:
                     stock = self.db.query(Stock).filter(
                         Stock.product_id == item.product_id,
                         Stock.pdv_id == invoice_data.pdv_id,
@@ -107,52 +187,47 @@ class InvoiceService:
     def calculate_invoice_totals(self, items: List[InvoiceLineItem], company_id: str) -> InvoiceTotals:
         """Calcular totales de la factura incluyendo impuestos"""
         subtotal = Decimal('0.00')
-        taxes_summary = {}
-        
+        taxes_total = Decimal('0.00')
+        taxes_summary: Dict[str, InvoiceTaxSummary] = {}
+
         for item in items:
-            # Subtotal
-            item_subtotal = item.quantity * item.unit_price
-            subtotal += item_subtotal
-            item.line_subtotal = item_subtotal
-            
-            # Calcular impuestos del producto
-            product_taxes = self.db.query(ProductTax).filter(
-                ProductTax.product_id == item.product_id,
-                ProductTax.tenant_id == company_id
-            ).all()
-            
-            item_taxes = []
-            for product_tax in product_taxes:
-                tax = product_tax.tax
-                tax_amount = item_subtotal * tax.rate
-                
-                item_taxes.append({
-                    "tax_id": str(tax.id),
-                    "tax_name": tax.name,
-                    "tax_rate": float(tax.rate),
-                    "taxable_amount": float(item_subtotal),
-                    "tax_amount": float(tax_amount)
-                })
-                
-                # Acumular en resumen
-                tax_key = str(tax.id)
-                if tax_key not in taxes_summary:
-                    taxes_summary[tax_key] = InvoiceTaxSummary(
-                        tax_id=tax.id,
-                        tax_name=tax.name,
-                        tax_rate=tax.rate,
-                        taxable_amount=Decimal('0.00'),
-                        tax_amount=Decimal('0.00')
-                    )
-                
-                taxes_summary[tax_key].taxable_amount += item_subtotal
-                taxes_summary[tax_key].tax_amount += tax_amount
-            
-            item.line_taxes = item_taxes
-            item.line_total = item_subtotal + sum(Decimal(str(t["tax_amount"])) for t in item_taxes)
-        
-        taxes_total = sum(tax.tax_amount for tax in taxes_summary.values())
-        
+            # Asegurar que los campos requeridos estén presentes
+            if item.line_subtotal is None:
+                try:
+                    item.line_subtotal = Decimal(item.quantity) * Decimal(item.unit_price)
+                except Exception:
+                    item.line_subtotal = Decimal('0.00')
+
+            # Si no hay impuestos definidos, line_total = line_subtotal
+            line_taxes_amount = Decimal('0.00')
+            if item.line_taxes:
+                try:
+                    for t in item.line_taxes:
+                        # t puede venir como dict con llaves: tax_id, tax_name, tax_rate, tax_amount
+                        tax_amount = Decimal(str(t.get("tax_amount", 0)))
+                        line_taxes_amount += tax_amount
+
+                        tax_key = str(t.get("tax_id") or t.get("tax_name"))
+                        if tax_key not in taxes_summary:
+                            taxes_summary[tax_key] = InvoiceTaxSummary(
+                                tax_id=t.get("tax_id"),
+                                tax_name=t.get("tax_name"),
+                                tax_rate=Decimal(str(t.get("tax_rate", 0))),
+                                taxable_amount=Decimal('0.00'),
+                                tax_amount=Decimal('0.00')
+                            )
+                        taxes_summary[tax_key].taxable_amount += Decimal(item.line_subtotal)
+                        taxes_summary[tax_key].tax_amount += tax_amount
+                except Exception:
+                    # Si hay problemas con el JSON de impuestos, ignoramos para no romper la creación
+                    line_taxes_amount = Decimal('0.00')
+
+            if item.line_total is None:
+                item.line_total = Decimal(item.line_subtotal) + line_taxes_amount
+
+            subtotal += Decimal(item.line_subtotal)
+            taxes_total += line_taxes_amount
+
         return InvoiceTotals(
             subtotal=subtotal,
             taxes=list(taxes_summary.values()),
@@ -208,6 +283,21 @@ class InvoiceService:
             # Generar número de factura
             invoice_number = self.generate_invoice_number(invoice_data.pdv_id, company_id)
             
+            # Mapear status del schema (string) al Enum del modelo  
+            if invoice_data.status is not None:
+                # invoice_data.status es un string Enum de Pydantic, necesitamos el Enum SQLAlchemy
+                if hasattr(invoice_data.status, 'value'):
+                    # Si es un Pydantic Enum, obtener el valor
+                    status_str = invoice_data.status.value
+                else:
+                    # Si es un string directo
+                    status_str = str(invoice_data.status)
+                
+                # Mapear al enum del modelo
+                status_value = InvoiceStatus(status_str)
+            else:
+                status_value = InvoiceStatus.DRAFT
+
             # Crear factura
             invoice = Invoice(
                 tenant_id=company_id,
@@ -216,7 +306,7 @@ class InvoiceService:
                 created_by=user_id,
                 number=invoice_number,
                 type=InvoiceType.SALE,
-                status=invoice_data.status,
+                status=status_value,
                 issue_date=invoice_data.issue_date,
                 due_date=invoice_data.due_date,
                 notes=invoice_data.notes
@@ -233,18 +323,26 @@ class InvoiceService:
                     Product.tenant_id == company_id
                 ).first()
                 
+                # Calcular subtotales antes de agregar para cumplir NOT NULL
+                try:
+                    item_subtotal = Decimal(item_data.quantity) * Decimal(item_data.unit_price)
+                except Exception:
+                    item_subtotal = Decimal('0.00')
+
                 line_item = InvoiceLineItem(
                     invoice_id=invoice.id,
                     product_id=item_data.product_id,
                     name=product.name,
                     sku=product.sku,
                     quantity=item_data.quantity,
-                    unit_price=item_data.unit_price
+                    unit_price=item_data.unit_price,
+                    line_subtotal=item_subtotal,
+                    line_total=item_subtotal,  # Sin impuestos por ahora
+                    line_taxes=[]  # Se puede poblar en el futuro con ProductTax
                 )
                 line_items.append(line_item)
                 self.db.add(line_item)
             
-            self.db.flush()
             
             # Calcular totales
             totals = self.calculate_invoice_totals(line_items, company_id)
@@ -252,9 +350,17 @@ class InvoiceService:
             invoice.taxes_total = totals.taxes_total
             invoice.total_amount = totals.total_amount
             
+            # Debug: log del status actual
+            logger.info(f"Invoice status before inventory check: {invoice.status} (type: {type(invoice.status)})")
+            logger.info(f"InvoiceStatus.OPEN value: {InvoiceStatus.OPEN} (type: {type(InvoiceStatus.OPEN)})")
+            logger.info(f"Status comparison result: {invoice.status == InvoiceStatus.OPEN}")
+            
             # Si la factura está abierta, afectar inventario
             if invoice.status == InvoiceStatus.OPEN:
+                logger.info(f"Creating inventory movements for invoice {invoice.number}")
                 self._update_inventory_for_invoice(invoice, line_items, company_id, user_id)
+            else:
+                logger.info(f"Skipping inventory movements - invoice status is {invoice.status}")
             
             self.db.commit()
             self.db.refresh(invoice)
@@ -273,7 +379,11 @@ class InvoiceService:
     def _update_inventory_for_invoice(self, invoice: Invoice, line_items: List[InvoiceLineItem], 
                                     company_id: str, user_id: UUID):
         """Actualizar inventario cuando una factura pasa a estado 'open'"""
+        logger.info(f"Starting inventory update for invoice {invoice.number} with {len(line_items)} line items")
+        
         for line_item in line_items:
+            logger.info(f"Processing line item: product_id={line_item.product_id}, quantity={line_item.quantity}")
+            
             # Actualizar stock
             stock = self.db.query(Stock).filter(
                 Stock.product_id == line_item.product_id,
@@ -282,7 +392,9 @@ class InvoiceService:
             ).first()
             
             if stock:
+                old_quantity = stock.quantity
                 stock.quantity -= line_item.quantity
+                logger.info(f"Updated stock for product {line_item.product_id}: {old_quantity} -> {stock.quantity}")
             else:
                 # Crear stock negativo si no existe
                 stock = Stock(
@@ -292,6 +404,7 @@ class InvoiceService:
                     quantity=-line_item.quantity
                 )
                 self.db.add(stock)
+                logger.info(f"Created new stock entry for product {line_item.product_id}: quantity={-line_item.quantity}")
             
             # Crear movimiento de inventario
             movement = InventoryMovement(
@@ -305,16 +418,21 @@ class InvoiceService:
                 created_by=user_id
             )
             self.db.add(movement)
+            logger.info(f"Created inventory movement: product_id={line_item.product_id}, quantity={-line_item.quantity}")
+            
+        logger.info(f"Completed inventory update for invoice {invoice.number}")
 
     def get_invoices(self, company_id: str, filters: InvoiceFilters, limit: int = 100, offset: int = 0) -> dict:
         """Obtener lista de facturas con filtros"""
         try:
             query = self.db.query(Invoice).options(
-                selectinload(Invoice.pdv)
+                selectinload(Invoice.pdv),
+                selectinload(Invoice.customer)
             ).filter(Invoice.tenant_id == company_id)
             
             # Aplicar filtros
             if filters.status:
+                # Ahora los enums coinciden, podemos usar directamente el valor
                 query = query.filter(Invoice.status == filters.status)
             
             if filters.customer_id:
@@ -341,12 +459,54 @@ class InvoiceService:
             
             total = query.count()
             invoices = query.offset(offset).limit(limit).all()
-            
+
+            # Enriquecer con customer_name para las respuestas
+            for inv in invoices:
+                try:
+                    # setattr para que Pydantic lo mapee como atributo calculado
+                    cust = getattr(inv, 'customer', None)
+                    if cust is not None and getattr(cust, 'name', None):
+                        setattr(inv, 'customer_name', cust.name)
+                    if cust is not None and getattr(cust, 'email', None):
+                        setattr(inv, 'customer_email', cust.email)
+                except Exception:
+                    pass
+
+            # Conteos por estado basados en los mismos filtros (excepto el estado específico si ya está aplicado)
+            counts_by_status = []
+            from app.modules.invoices.schemas import InvoiceStatus as InvoiceStatusSchema
+            status_values = [InvoiceStatus.DRAFT, InvoiceStatus.OPEN, InvoiceStatus.PAID, InvoiceStatus.VOID]
+            for st in status_values:
+                q_status = query
+                if filters.status and filters.status != st:
+                    # Si ya filtramos por estado distinto, este conteo no aplica al conjunto actual
+                    count = 0
+                else:
+                    # Volvemos a aplicar todos los filtros excepto el estado (lo fijamos al de iteración)
+                    base_q = self.db.query(Invoice).filter(Invoice.tenant_id == company_id)
+                    if filters.customer_id:
+                        base_q = base_q.filter(Invoice.customer_id == filters.customer_id)
+                    if filters.pdv_id:
+                        base_q = base_q.filter(Invoice.pdv_id == filters.pdv_id)
+                    if filters.date_from:
+                        base_q = base_q.filter(Invoice.issue_date >= filters.date_from)
+                    if filters.date_to:
+                        base_q = base_q.filter(Invoice.issue_date <= filters.date_to)
+                    if filters.search:
+                        base_q = base_q.filter(or_(
+                            Invoice.number.ilike(f"%{filters.search}%"),
+                            Invoice.notes.ilike(f"%{filters.search}%")
+                        ))
+                    count = base_q.filter(Invoice.status == st).count()
+                counts_by_status.append({"status": st, "count": count})
+
             return {
                 "invoices": invoices,
                 "total": total,
                 "limit": limit,
-                "offset": offset
+                "offset": offset,
+                "applied_filters": filters,
+                "counts_by_status": counts_by_status
             }
             
         except Exception as e:
@@ -397,11 +557,32 @@ class InvoiceService:
                 )
             
             # Crear pago
+            # Mapear datos de pago y convertir enum si es necesario
+            payment_dict = payment_data.model_dump()
+            logger.info(f"Original payment data: {payment_dict}")
+            
+            # Convertir PaymentMethod string a enum SQLAlchemy si es necesario
+            if 'method' in payment_dict:
+                method_value = payment_dict['method']
+                logger.info(f"Payment method before conversion: {method_value} (type: {type(method_value)})")
+                
+                if hasattr(method_value, 'value'):
+                    # Si es un Pydantic Enum, obtener el valor string
+                    method_str = method_value.value
+                else:
+                    # Si es un string directo
+                    method_str = str(method_value)
+                
+                # Convertir a enum SQLAlchemy
+                from app.modules.invoices.models import PaymentMethod as ModelPaymentMethod
+                payment_dict['method'] = ModelPaymentMethod(method_str)
+                logger.info(f"Payment method after conversion: {payment_dict['method']} (type: {type(payment_dict['method'])})")
+            
             payment = Payment(
                 invoice_id=invoice_id,
                 tenant_id=company_id,
                 created_by=user_id,
-                **payment_data.model_dump()
+                **payment_dict
             )
             
             self.db.add(payment)
@@ -424,6 +605,120 @@ class InvoiceService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error agregando pago: {str(e)}"
             )
+
+    def cancel_invoice(self, invoice_id: UUID, reason: str, company_id: str) -> Invoice:
+        """
+        Cancelar factura con reversión completa de inventario
+        
+        Args:
+            invoice_id: ID de la factura a cancelar
+            reason: Motivo de la cancelación  
+            company_id: ID de la empresa
+            
+        Returns:
+            Invoice cancelada
+        """
+        try:
+            invoice = self.get_invoice_by_id(invoice_id, company_id)
+            
+            # Validar que no esté pagada
+            if invoice.status == InvoiceStatus.PAID:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No se pueden cancelar facturas que ya están pagadas"
+                )
+            
+            # Validar que no esté ya anulada/cancelada
+            if invoice.status == InvoiceStatus.VOID:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="La factura ya está cancelada"
+                )
+            
+            logger.info(f"Canceling invoice {invoice.number} - Reason: {reason}")
+            
+            # Si la factura estaba abierta (OPEN), revertir movimientos de inventario
+            if invoice.status == InvoiceStatus.OPEN:
+                logger.info(f"Reverting inventory movements for invoice {invoice.number}")
+                self._revert_inventory_for_invoice(invoice, company_id)
+            
+            # Cambiar estado a anulada/cancelada
+            old_status = invoice.status
+            invoice.status = InvoiceStatus.VOID
+            
+            # Agregar nota de cancelación
+            if invoice.notes:
+                invoice.notes += f"\n\n[CANCELADA] {reason}"
+            else:
+                invoice.notes = f"[CANCELADA] {reason}"
+            
+            logger.info(f"Invoice {invoice.number} status changed from {old_status} to {invoice.status}")
+            
+            self.db.commit()
+            self.db.refresh(invoice)
+            
+            return invoice
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error canceling invoice {invoice_id}: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error cancelando factura: {str(e)}"
+            )
+
+    def _revert_inventory_for_invoice(self, invoice: Invoice, company_id: str):
+        """
+        Revertir movimientos de inventario para una factura cancelada
+        
+        Args:
+            invoice: Factura a revertir
+            company_id: ID de la empresa
+        """
+        logger.info(f"Starting inventory reversion for invoice {invoice.number}")
+        
+        for line_item in invoice.line_items:
+            logger.info(f"Reverting inventory for product {line_item.product_id}, quantity: {line_item.quantity}")
+            
+            # Encontrar y actualizar stock
+            stock = self.db.query(Stock).filter(
+                Stock.product_id == line_item.product_id,
+                Stock.pdv_id == invoice.pdv_id,
+                Stock.tenant_id == company_id
+            ).first()
+            
+            if stock:
+                old_quantity = stock.quantity
+                stock.quantity += line_item.quantity  # Sumar de vuelta (revertir la resta)
+                logger.info(f"Reverted stock for product {line_item.product_id}: {old_quantity} -> {stock.quantity}")
+            else:
+                # Si no existe stock, crear entrada positiva
+                stock = Stock(
+                    product_id=line_item.product_id,
+                    pdv_id=invoice.pdv_id,
+                    tenant_id=company_id,
+                    quantity=line_item.quantity
+                )
+                self.db.add(stock)
+                logger.info(f"Created new stock entry for product {line_item.product_id}: quantity={line_item.quantity}")
+            
+            # Crear movimiento de inventario de reversión
+            movement = InventoryMovement(
+                product_id=line_item.product_id,
+                pdv_id=invoice.pdv_id,
+                tenant_id=company_id,
+                quantity=line_item.quantity,  # Positivo porque es entrada (reversión)
+                movement_type="IN",  # Entrada
+                reference=f"Cancelación Factura {invoice.number}",
+                notes=f"Reversión de venta - Factura {invoice.number} cancelada",
+                created_by=invoice.created_by
+            )
+            self.db.add(movement)
+            logger.info(f"Created reversal inventory movement: product_id={line_item.product_id}, quantity={line_item.quantity}")
+        
+        logger.info(f"Completed inventory reversion for invoice {invoice.number}")
 
     def void_invoice(self, invoice_id: UUID, company_id: str) -> Invoice:
         """Anular factura"""
@@ -491,7 +786,7 @@ class InvoiceService:
     ):
         """Generar resumen de ventas por período"""
         from app.modules.invoices.schemas import SalesSummary
-        from sqlalchemy import func, extract
+    # 'func' is already imported at module level; 'extract' not used
         
         try:
             query = self.db.query(Invoice).filter(
@@ -508,12 +803,12 @@ class InvoiceService:
             # Calcular totales
             total_invoices = len(invoices)
             total_amount = sum(inv.total_amount for inv in invoices)
-            total_tax = sum(inv.total_tax for inv in invoices)
+            total_tax = sum(inv.taxes_total for inv in invoices)
             
             # Agrupar por estado
-            pending_amount = sum(inv.total_amount for inv in invoices if inv.status == "pending")
-            paid_amount = sum(inv.total_amount for inv in invoices if inv.status == "paid")
-            cancelled_amount = sum(inv.total_amount for inv in invoices if inv.status == "cancelled")
+            pending_amount = sum(inv.total_amount for inv in invoices if inv.status == InvoiceStatus.OPEN)
+            paid_amount = sum(inv.total_amount for inv in invoices if inv.status == InvoiceStatus.PAID)
+            cancelled_amount = sum(inv.total_amount for inv in invoices if inv.status == InvoiceStatus.VOID)
             
             # Ventas diarias (simplificado para MVP)
             daily_sales = []
@@ -600,4 +895,151 @@ class InvoiceService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error obteniendo siguiente número: {str(e)}"
+            )
+
+    def send_invoice_email(
+        self, 
+        invoice_id: UUID, 
+        to_email: str, 
+        pdf_content: bytes, 
+        pdf_filename: str,
+        company_id: str,
+        custom_message: Optional[str] = None,
+        subject: Optional[str] = None
+    ) -> dict:
+        """
+        Enviar factura por email con PDF adjunto usando Celery.
+        
+        Args:
+            invoice_id: ID de la factura
+            to_email: Email del destinatario  
+            pdf_content: Contenido del PDF en bytes
+            pdf_filename: Nombre del archivo PDF
+            company_id: ID de la empresa
+            custom_message: Mensaje personalizado opcional
+            subject: Asunto personalizado opcional
+            
+        Returns:
+            dict con información del envío
+        """
+        try:
+            # Obtener datos de la factura
+            invoice = self.get_invoice_by_id(invoice_id, company_id)
+            
+            # Obtener datos de la empresa
+            from app.modules.company.models import Company
+            company = self.db.query(Company).filter(Company.id == company_id).first()
+            if not company:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Empresa no encontrada"
+                )
+            
+            # Preparar datos para el template
+            invoice_data = {
+                "number": invoice.number,
+                "issue_date": invoice.issue_date.strftime("%d/%m/%Y") if invoice.issue_date else "",
+                "due_date": invoice.due_date.strftime("%d/%m/%Y") if invoice.due_date else None,
+                "total_amount": float(invoice.total_amount),
+                "balance_due": float(invoice.balance_due),
+                "customer_name": getattr(invoice.customer, 'name', 'Cliente') if invoice.customer else 'Cliente',
+                "payment_url": None  # Se puede implementar luego para ver factura online
+            }
+            
+            company_data = {
+                "name": company.name,
+                "phone": getattr(company, 'phone_number', None),
+                "email": None  # El modelo Company no tiene email por ahora
+            }
+            
+            # Importar y lanzar tarea de Celery
+            from app.modules.email.tasks import send_invoice_email_task
+            import base64
+            
+            # Convertir bytes a base64 para serialización JSON
+            pdf_content_b64 = base64.b64encode(pdf_content).decode('utf-8')
+            
+            # Enviar de forma asíncrona
+            task = send_invoice_email_task.delay(
+                to_email=to_email,
+                invoice_data=invoice_data,
+                company_data=company_data,
+                pdf_content_b64=pdf_content_b64,
+                pdf_filename=pdf_filename,
+                custom_message=custom_message,
+                subject=subject
+            )
+            
+            return {
+                "status": "queued",
+                "task_id": task.id,
+                "message": f"Email de factura {invoice.number} programado para envío a {to_email}"
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error enviando email: {str(e)}"
+            )
+
+    def get_monthly_status_summary(self, tenant_id: UUID, year: int, month: int) -> InvoicesMonthlySummary:
+        """
+        Resumen mensual por estado: total, open, paid, void.
+        Retorna conteo de facturas y recaudado (suma de total_amount).
+        """
+        try:
+            # Rango de fechas del mes
+            from datetime import date
+            if month < 1 or month > 12:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mes inválido. Debe estar entre 1 y 12")
+            month_start = date(year, month, 1)
+            # calcular fin de mes: primer día del mes siguiente
+            if month == 12:
+                next_month = date(year + 1, 1, 1)
+            else:
+                next_month = date(year, month + 1, 1)
+            month_end = next_month
+
+            # Base query por tenant y rango
+            base_q = self.db.query(Invoice).filter(
+                Invoice.tenant_id == tenant_id,
+                Invoice.issue_date >= month_start,
+                Invoice.issue_date < month_end
+            )
+
+            # Total (todas las facturas)
+            total_count = base_q.count()
+            total_amount = self.db.query(func.coalesce(func.sum(Invoice.total_amount), 0)).filter(
+                Invoice.tenant_id == tenant_id,
+                Invoice.issue_date >= month_start,
+                Invoice.issue_date < month_end
+            ).scalar() or 0
+
+            def status_metrics(status_value: InvoiceStatus) -> MonthlyStatusMetrics:
+                q = base_q.filter(Invoice.status == status_value)
+                count = q.count()
+                amount = self.db.query(func.coalesce(func.sum(Invoice.total_amount), 0)).filter(
+                    Invoice.tenant_id == tenant_id,
+                    Invoice.issue_date >= month_start,
+                    Invoice.issue_date < month_end,
+                    Invoice.status == status_value
+                ).scalar() or 0
+                return MonthlyStatusMetrics(count=count, recaudado=amount)
+
+            return InvoicesMonthlySummary(
+                year=year,
+                month=month,
+                total=MonthlyStatusMetrics(count=total_count, recaudado=total_amount),
+                open=status_metrics(InvoiceStatus.OPEN),
+                paid=status_metrics(InvoiceStatus.PAID),
+                void=status_metrics(InvoiceStatus.VOID)
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error generando resumen mensual: {str(e)}"
             )
