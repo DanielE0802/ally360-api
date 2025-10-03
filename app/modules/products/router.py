@@ -100,6 +100,7 @@ async def list_products(
         category_id=category_id,
         brand_id=brand_id,
         is_active=is_active
+    )
 
 @product_router.get("/stock", response_model=LowStockResponse)
 async def low_stock_products(
@@ -116,7 +117,6 @@ async def low_stock_products(
     if not low_stock:
         return LowStockResponse(products=[], total_count=0)
     return await service.get_low_stock_products(db=db, tenant_id=str(auth_context.tenant_id))
-    )
 
 @product_router.get("/{product_id}", response_model=GetProductResponse)
 async def get_product(

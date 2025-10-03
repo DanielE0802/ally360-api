@@ -1,3 +1,8 @@
+from pydantic import BaseModel, Field
+from uuid import UUID
+from typing import Optional, List, Literal, Any, Dict
+from datetime import datetime
+
 class LowStockProduct(BaseModel):
     id: str
     name: str
@@ -10,10 +15,6 @@ class LowStockProduct(BaseModel):
 class LowStockResponse(BaseModel):
     products: List[LowStockProduct]
     total_count: int
-from pydantic import BaseModel, Field
-from uuid import UUID
-from typing import Optional, List, Literal, Any, Dict
-from datetime import datetime
 
 # Schema base para paginación estándar
 class PaginatedResponse(BaseModel):

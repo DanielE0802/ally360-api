@@ -1,27 +1,3 @@
-from app.modules.invoices.schemas import TopProductsResponse, SalesComparison
-from app.modules.invoices.service import get_top_products, get_sales_comparison
-# --- REPORTES Y ESTADÍSTICAS ---
-
-@router.get("/reports/top-products", response_model=TopProductsResponse)
-async def get_top_products_endpoint(
-    period: str = Query("month", description="Periodo: day, week, month"),
-    db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
-):
-    """
-    Top-selling products for the tenant in the given period.
-    """
-    return await get_top_products(db=db, tenant_id=auth_context.tenant_id, period=period)
-
-@router.get("/reports/comparison", response_model=SalesComparison)
-async def get_sales_comparison_endpoint(
-    db: Session = Depends(get_db),
-    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
-):
-    """
-    Sales comparison (today vs yesterday) for the tenant.
-    """
-    return await get_sales_comparison(db=db, tenant_id=auth_context.tenant_id)
 from fastapi import APIRouter, Depends, status, Query, HTTPException, BackgroundTasks, File, UploadFile, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -29,6 +5,18 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 import tempfile
+import os
+
+from app.database.database import get_db
+from app.modules.auth.dependencies import AuthDependencies
+from app.modules.invoices.service import InvoiceService
+from app.modules.invoices.schemas import (
+    InvoiceCreate, InvoiceOut, InvoiceDetail, InvoiceList, 
+    PaymentCreate, PaymentOut, InvoiceEmailRequest, InvoiceEmailResponse,
+    InvoiceUpdate, InvoiceCancelRequest, InvoiceFilters, InvoiceStatus,
+    InvoicesMonthlySummary, TopProductsResponse, SalesComparison, PDVSalesResponse
+)
+from app.modules.invoices.service import get_top_products, get_sales_comparison, get_sales_by_pdv
 import os
 
 from app.database.database import get_db
@@ -289,5 +277,40 @@ def get_invoices_monthly_status(
     """
     service = InvoiceService(db)
     return service.get_monthly_status_summary(auth_context.tenant_id, year, month)
+
+
+@router.get("/reports/top-products", response_model=TopProductsResponse)
+async def get_top_products_endpoint(
+    period: str = Query("month", description="Periodo: day, week, month"),
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
+):
+    """
+    Top-selling products for the tenant in the given period.
+    """
+    return await get_top_products(db=db, tenant_id=auth_context.tenant_id, period=period)
+
+
+@router.get("/reports/comparison", response_model=SalesComparison)
+async def get_sales_comparison_endpoint(
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
+):
+    """
+    Sales comparison (today vs yesterday) for the tenant.
+    """
+    return await get_sales_comparison(db=db, tenant_id=auth_context.tenant_id)
+
+
+@router.get("/reports/sales-by-pdv", response_model=PDVSalesResponse)
+async def get_sales_by_pdv_endpoint(
+    period: str = Query("month", description="Periodo: day, week, month"),
+    db: Session = Depends(get_db),
+    auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
+):
+    """
+    Sales comparison by PDV for charts - useful for comparing performance across stores.
+    """
+    return await get_sales_by_pdv(db=db, tenant_id=auth_context.tenant_id, period=period)
 
 

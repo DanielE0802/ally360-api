@@ -323,17 +323,33 @@ class InvoiceEmailRequest(BaseModel):
         return v
 
 
-class SalesSummary(BaseModel):
-    period_start: date
-    period_end: date
+class SalesComparison(BaseModel):
+    today: Dict[str, Any]
+    yesterday: Dict[str, Any]
+    percentage_change: float
+    amount_change: str
+
+class TopProduct(BaseModel):
+    product_id: str
+    product_name: str
+    sku: str
+    total_quantity: int
+    total_amount: str
+
+class TopProductsResponse(BaseModel):
+    products: List[TopProduct]
+    period: str
+
+class PDVSales(BaseModel):
+    pdv_id: str
+    pdv_name: str
+    total_sales: str
     total_invoices: int
-    total_amount: Decimal
-    total_tax: Decimal
-    pending_amount: Decimal
-    paid_amount: Decimal
-    cancelled_amount: Decimal
-    top_products: List[Dict[str, Any]]
-    daily_sales: List[Dict[str, Any]]
+
+class PDVSalesResponse(BaseModel):
+    sales_by_pdv: List[PDVSales]
+    period: str
+    total_amount: str
 
 
 class NextInvoiceNumber(BaseModel):

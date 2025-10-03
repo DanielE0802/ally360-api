@@ -1,5 +1,5 @@
-from app.modules.invoices.schemas import TopProduct, TopProductsResponse, SalesComparison
-from sqlalchemy import select, func, cast, String
+from app.modules.invoices.schemas import TopProduct, TopProductsResponse, SalesComparison, PDVSales, PDVSalesResponse
+from sqlalchemy import select, func, cast, String, and_
 from datetime import date, timedelta
 async def get_top_products(db, tenant_id: str, period: str = "month") -> TopProductsResponse:
     """Return top-selling products for the tenant in the given period."""
@@ -70,6 +70,48 @@ async def get_sales_comparison(db, tenant_id: str) -> SalesComparison:
         yesterday={"date": str(yesterday), "total": str(total_yesterday)},
         percentage_change=pct,
         amount_change=str(amt)
+    )
+
+async def get_sales_by_pdv(db, tenant_id: str, period: str = "month") -> PDVSalesResponse:
+    """Return sales grouped by PDV (point of sale) for chart comparison."""
+    from app.modules.invoices.models import Invoice
+    from app.modules.pdv.models import PDV
+    today = date.today()
+    if period == "day":
+        start = today
+    elif period == "week":
+        start = today - timedelta(days=today.weekday())
+    else:
+        start = today.replace(day=1)
+    
+    query = (
+        select(
+            PDV.id,
+            PDV.name,
+            func.coalesce(func.sum(Invoice.total), 0).label("total_sales"),
+            func.count(Invoice.id).label("total_invoices")
+        )
+        .outerjoin(Invoice, and_(Invoice.pdv_id == PDV.id, Invoice.date >= start, Invoice.date <= today, Invoice.tenant_id == tenant_id))
+        .where(PDV.tenant_id == tenant_id)
+        .group_by(PDV.id, PDV.name)
+        .order_by(func.sum(Invoice.total).desc())
+    )
+    result = await db.execute(query)
+    sales_by_pdv = []
+    total_amount = 0
+    for pdv_id, pdv_name, total_sales, total_invoices in result.fetchall():
+        sales_by_pdv.append(PDVSales(
+            pdv_id=str(pdv_id),
+            pdv_name=pdv_name,
+            total_sales=str(total_sales),
+            total_invoices=total_invoices or 0
+        ))
+        total_amount += total_sales or 0
+    
+    return PDVSalesResponse(
+        sales_by_pdv=sales_by_pdv,
+        period=period,
+        total_amount=str(total_amount)
     )
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, selectinload
