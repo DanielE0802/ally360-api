@@ -186,3 +186,50 @@ class MinIOService:
 
 # Singleton instance
 minio_service = MinIOService()
+
+
+def upload_file_to_minio(file, bucket_name: str, object_key: str) -> str:
+    """
+    Upload file directly to MinIO and return the URL.
+    Used for avatar and logo uploads.
+    """
+    try:
+        # Upload file to MinIO
+        minio_service.client.put_object(
+            bucket_name=bucket_name,
+            object_name=object_key,
+            data=file.file,
+            length=file.size or -1,
+            content_type=file.content_type
+        )
+        
+        # Generate public URL for the uploaded file
+        file_url = f"http://{settings.minio_public_endpoint}/{bucket_name}/{object_key}"
+        return file_url
+        
+    except S3Error as e:
+        logger.error(f"MinIO upload error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al subir archivo"
+        )
+
+
+def get_presigned_download_url(bucket_name: str, object_key: str, expires_in_hours: int = 1) -> str:
+    """
+    Generate presigned URL for secure file download.
+    """
+    try:
+        expires = timedelta(hours=expires_in_hours)
+        download_url = minio_service.get_presigned_download_url(
+            key=object_key,
+            expires=expires
+        )
+        return download_url
+        
+    except Exception as e:
+        logger.error(f"Error generating presigned URL: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al generar URL de descarga"
+        )

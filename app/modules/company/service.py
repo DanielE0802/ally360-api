@@ -154,3 +154,178 @@ def create_tenant_company(db: Session, name: str, owner_id: UUID) -> Company:
     
     return company
 
+
+def update_company(db, company_update, current_user):
+    """
+    Update company information.
+    NIT cannot be updated.
+    """
+    # Get user's active company
+    user_company = db.query(UserCompany).join(Company).filter(
+        UserCompany.user_id == current_user.id,
+        UserCompany.is_active == True,
+        UserCompany.role.in_(["admin", "owner"])
+    ).first()
+    
+    if not user_company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No tienes permisos para actualizar esta empresa"
+        )
+
+    company = user_company.company
+
+    # Update only provided fields, excluding NIT
+    if company_update.name is not None:
+        # Check if name already exists (excluding current company)
+        existing = db.query(Company).filter(
+            Company.name == company_update.name,
+            Company.id != company.id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ya existe una empresa con este nombre"
+            )
+        company.name = company_update.name
+
+    if company_update.description is not None:
+        company.description = company_update.description
+    if company_update.address is not None:
+        company.address = company_update.address
+    if company_update.phone_number is not None:
+        company.phone_number = company_update.phone_number
+    if company_update.economic_activity is not None:
+        company.economic_activity = company_update.economic_activity
+    if company_update.quantity_employees is not None:
+        company.quantity_employees = company_update.quantity_employees
+    if company_update.social_reason is not None:
+        company.social_reason = company_update.social_reason
+
+    db.commit()
+    db.refresh(company)
+    return company
+
+
+def upload_company_logo(db, file, current_user):
+    """
+    Upload company logo to MinIO and update company.
+    """
+    from app.modules.files.service import upload_file_to_minio
+    import uuid
+
+    # Validate file type
+    if not file.content_type.startswith('image/'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se permiten archivos de imagen"
+        )
+
+    # Get user's active company
+    user_company = db.query(UserCompany).join(Company).filter(
+        UserCompany.user_id == current_user.id,
+        UserCompany.is_active == True,
+        UserCompany.role.in_(["admin", "owner"])
+    ).first()
+    
+    if not user_company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No tienes permisos para actualizar el logo de esta empresa"
+        )
+
+    company = user_company.company
+
+    # Generate unique filename
+    file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+    unique_filename = f"logo_{uuid.uuid4()}.{file_extension}"
+    file_key = f"company-logos/{company.id}/{unique_filename}"
+
+    try:
+        # Upload to MinIO
+        file_url = upload_file_to_minio(
+            file=file,
+            bucket_name="ally360",
+            object_key=file_key
+        )
+
+        # Update company logo
+        company.logo = file_url
+        db.commit()
+
+        return {
+            "message": "Logo subido exitosamente",
+            "logo_url": file_url
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al subir logo: {str(e)}"
+        )
+
+
+def get_company_logo_url(db, current_user):
+    """
+    Get presigned URL for company logo.
+    """
+    try:
+        # Get current user's company
+        user_company = db.query(UserCompany).filter(
+            UserCompany.user_id == current_user.id
+        ).first()
+
+        if not user_company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no pertenece a ninguna empresa"
+            )
+
+        company = db.query(Company).filter(
+            Company.id == user_company.company_id
+        ).first()
+
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Empresa no encontrada"
+            )
+
+        if not company.logo:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="La empresa no tiene logo"
+            )
+
+        # Extract MinIO key from stored URL
+        logo_url = company.logo
+        if "/ally360/" in logo_url:
+            object_key = logo_url.split("/ally360/", 1)[1]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="URL de logo inválida"
+            )
+
+        from app.modules.files.service import get_presigned_download_url
+        
+        # Generate temporary URL valid for 1 hour
+        presigned_url = get_presigned_download_url(
+            bucket_name="ally360",
+            object_key=object_key,
+            expires_in_hours=1
+        )
+
+        return {
+            "logo_url": presigned_url,
+            "expires_in": "1 hour"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener logo: {str(e)}"
+        )
+

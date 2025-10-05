@@ -14,7 +14,15 @@ class ProfileUpdate(BaseModel):
     first_name: Optional[str] = Field(None, min_length=2, max_length=50)
     last_name: Optional[str] = Field(None, min_length=2, max_length=50)
     phone_number: Optional[str] = Field(None, max_length=20)
-    dni: Optional[str] = Field(None, max_length=20)
+    # DNI is excluded - cannot be updated
+
+class UserUpdate(BaseModel):
+    """Schema for updating user information. Email and password changes require separate endpoints."""
+    profile: Optional[ProfileUpdate] = None
+
+class ImageUploadResponse(BaseModel):
+    message: str
+    avatar_url: str
 
 class ProfileOut(BaseModel):
     id: UUID
@@ -86,6 +94,27 @@ class ContextTokenResponse(BaseModel):
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
+# Company users schemas
+class CompanyUserOut(BaseModel):
+    id: UUID
+    email: str
+    is_active: bool
+    email_verified: bool
+    profile: ProfileOut
+    role: str
+    is_user_active: bool
+    joined_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class CompanyUsersResponse(BaseModel):
+    users: List[CompanyUserOut]
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
 # Email verification schemas
 class EmailVerificationRequest(BaseModel):
     email: EmailStr
@@ -144,6 +173,19 @@ class CompanyInvitationAccept(BaseModel):
         if len(v) < 8:
             raise ValueError('La contraseña debe tener al menos 8 caracteres')
         return v
+
+class CompanyInvitationAcceptExisting(BaseModel):
+    """Schema for existing users accepting company invitations."""
+    token: str
+
+class InvitationInfo(BaseModel):
+    """Information about an invitation token."""
+    company_name: str
+    company_id: UUID
+    invitee_email: str
+    role: str
+    user_exists: bool
+    expires_at: datetime
 
 # Company selection schemas
 class CompanySelectionRequest(BaseModel):

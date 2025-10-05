@@ -1,66 +1,80 @@
 from app.modules.invoices.schemas import TopProduct, TopProductsResponse, SalesComparison, PDVSales, PDVSalesResponse
 from sqlalchemy import select, func, cast, String, and_
 from datetime import date, timedelta
-async def get_top_products(db, tenant_id: str, period: str = "month") -> TopProductsResponse:
-    """Return top-selling products for the tenant in the given period."""
+def get_top_products(db, tenant_id: str, period: str = "month", start_date=None, end_date=None, limit: int = 10) -> TopProductsResponse:
+    """Return top-selling products for the tenant in the given period or date range."""
     # Example: group by product, sum quantity and amount
-    from app.modules.invoices.models import Invoice, InvoiceItem
+    from app.modules.invoices.models import Invoice, InvoiceLineItem
     from app.modules.products.models import Product
-    today = date.today()
-    if period == "day":
-        start = today
-    elif period == "week":
-        start = today - timedelta(days=today.weekday())
+    
+    # Determine date range
+    if start_date and end_date:
+        # Use custom date range
+        start = start_date
+        end = end_date
+        period_label = f"{start} to {end}"
     else:
-        start = today.replace(day=1)
+        # Use predefined period
+        today = date.today()
+        if period == "day":
+            start = today
+            end = today
+        elif period == "week":
+            start = today - timedelta(days=today.weekday())
+            end = today
+        else:
+            start = today.replace(day=1)
+            end = today
+        period_label = period
+    
     query = (
         select(
             Product.id,
             Product.name,
             Product.sku,
-            func.sum(InvoiceItem.quantity).label("total_quantity"),
-            func.sum(InvoiceItem.total).label("total_amount")
+            func.sum(InvoiceLineItem.quantity).label("total_quantity"),
+            func.sum(InvoiceLineItem.line_total).label("total_amount")
         )
-        .join(InvoiceItem, InvoiceItem.product_id == Product.id)
-        .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
+        .join(InvoiceLineItem, InvoiceLineItem.product_id == Product.id)
+        .join(Invoice, Invoice.id == InvoiceLineItem.invoice_id)
         .where(
             Invoice.tenant_id == tenant_id,
-            Invoice.date >= start,
-            Invoice.date <= today
+            Invoice.issue_date >= start,
+            Invoice.issue_date <= end
         )
         .group_by(Product.id, Product.name, Product.sku)
-        .order_by(func.sum(InvoiceItem.quantity).desc())
-        .limit(10)
+        .order_by(func.sum(InvoiceLineItem.quantity).desc())
+        .limit(limit)
     )
-    result = await db.execute(query)
+    result = db.execute(query)
     products = []
     for pid, name, sku, qty, amount in result.fetchall():
         products.append(TopProduct(
             product_id=str(pid),
             product_name=name,
             sku=sku,
-            total_quantity=qty,
-            total_amount=str(amount)
+            total_quantity=int(qty) if qty else 0,
+            total_amount=str(amount) if amount else "0"
         ))
-    return TopProductsResponse(products=products, period=period)
+    return TopProductsResponse(products=products, period=period_label)
 
-async def get_sales_comparison(db, tenant_id: str) -> SalesComparison:
+def get_sales_comparison(db, tenant_id: str) -> SalesComparison:
     """Return sales comparison today vs yesterday for the tenant."""
     from app.modules.invoices.models import Invoice
     today = date.today()
     yesterday = today - timedelta(days=1)
     # Sum total for today
-    q_today = select(func.coalesce(func.sum(Invoice.total), 0)).where(
+    q_today = select(func.coalesce(func.sum(Invoice.total_amount), 0)).where(
         Invoice.tenant_id == tenant_id,
-        Invoice.date == today
+        Invoice.issue_date == today
     )
     # Sum total for yesterday
-    q_yesterday = select(func.coalesce(func.sum(Invoice.total), 0)).where(
+    q_yesterday = select(func.coalesce(func.sum(Invoice.total_amount), 0)).where(
         Invoice.tenant_id == tenant_id,
-        Invoice.date == yesterday
+        Invoice.issue_date == yesterday
     )
-    res_today = await db.execute(q_today)
-    res_yesterday = await db.execute(q_yesterday)
+    res_today = db.execute(q_today)
+    res_yesterday = db.execute(q_yesterday)
     total_today = res_today.scalar()
     total_yesterday = res_yesterday.scalar()
     pct = ((total_today - total_yesterday) / total_yesterday * 100) if total_yesterday else 100.0 if total_today else 0.0
@@ -72,7 +86,7 @@ async def get_sales_comparison(db, tenant_id: str) -> SalesComparison:
         amount_change=str(amt)
     )
 
-async def get_sales_by_pdv(db, tenant_id: str, period: str = "month") -> PDVSalesResponse:
+def get_sales_by_pdv(db, tenant_id: str, period: str = "month") -> PDVSalesResponse:
     """Return sales grouped by PDV (point of sale) for chart comparison."""
     from app.modules.invoices.models import Invoice
     from app.modules.pdv.models import PDV
@@ -88,15 +102,20 @@ async def get_sales_by_pdv(db, tenant_id: str, period: str = "month") -> PDVSale
         select(
             PDV.id,
             PDV.name,
-            func.coalesce(func.sum(Invoice.total), 0).label("total_sales"),
+            func.coalesce(func.sum(Invoice.total_amount), 0).label("total_sales"),
             func.count(Invoice.id).label("total_invoices")
         )
-        .outerjoin(Invoice, and_(Invoice.pdv_id == PDV.id, Invoice.date >= start, Invoice.date <= today, Invoice.tenant_id == tenant_id))
+        .outerjoin(Invoice, and_(
+            Invoice.pdv_id == PDV.id, 
+            Invoice.issue_date >= start, 
+            Invoice.issue_date <= today, 
+            Invoice.tenant_id == tenant_id
+        ))
         .where(PDV.tenant_id == tenant_id)
         .group_by(PDV.id, PDV.name)
-        .order_by(func.sum(Invoice.total).desc())
+        .order_by(func.sum(Invoice.total_amount).desc())
     )
-    result = await db.execute(query)
+    result = db.execute(query)
     sales_by_pdv = []
     total_amount = 0
     for pdv_id, pdv_name, total_sales, total_invoices in result.fetchall():
@@ -106,7 +125,7 @@ async def get_sales_by_pdv(db, tenant_id: str, period: str = "month") -> PDVSale
             total_sales=str(total_sales),
             total_invoices=total_invoices or 0
         ))
-        total_amount += total_sales or 0
+        total_amount += float(total_sales) if total_sales else 0
     
     return PDVSalesResponse(
         sales_by_pdv=sales_by_pdv,

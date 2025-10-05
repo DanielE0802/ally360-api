@@ -280,30 +280,40 @@ def get_invoices_monthly_status(
 
 
 @router.get("/reports/top-products", response_model=TopProductsResponse)
-async def get_top_products_endpoint(
+def get_top_products_endpoint(
     period: str = Query("month", description="Periodo: day, week, month"),
+    start_date: Optional[date] = Query(None, description="Fecha inicial (YYYY-MM-DD)"),
+    end_date: Optional[date] = Query(None, description="Fecha final (YYYY-MM-DD)"),
+    limit: int = Query(10, ge=1, le=100, description="Número de productos a retornar"),
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
 ):
     """
-    Top-selling products for the tenant in the given period.
+    Top-selling products for the tenant in the given period or date range.
     """
-    return await get_top_products(db=db, tenant_id=auth_context.tenant_id, period=period)
+    return get_top_products(
+        db=db, 
+        tenant_id=auth_context.tenant_id, 
+        period=period,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit
+    )
 
 
 @router.get("/reports/comparison", response_model=SalesComparison)
-async def get_sales_comparison_endpoint(
+def get_sales_comparison_endpoint(
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
 ):
     """
     Sales comparison (today vs yesterday) for the tenant.
     """
-    return await get_sales_comparison(db=db, tenant_id=auth_context.tenant_id)
+    return get_sales_comparison(db=db, tenant_id=auth_context.tenant_id)
 
 
 @router.get("/reports/sales-by-pdv", response_model=PDVSalesResponse)
-async def get_sales_by_pdv_endpoint(
+def get_sales_by_pdv_endpoint(
     period: str = Query("month", description="Periodo: day, week, month"),
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "viewer"]))
@@ -311,6 +321,6 @@ async def get_sales_by_pdv_endpoint(
     """
     Sales comparison by PDV for charts - useful for comparing performance across stores.
     """
-    return await get_sales_by_pdv(db=db, tenant_id=auth_context.tenant_id, period=period)
+    return get_sales_by_pdv(db=db, tenant_id=auth_context.tenant_id, period=period)
 
 

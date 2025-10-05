@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi import APIRouter, HTTPException, Depends, status, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List
@@ -12,7 +12,9 @@ from app.modules.auth.schemas import (
     EmailVerificationRequest, EmailVerificationConfirm,
     PasswordResetRequest, PasswordResetConfirm,
     CompanyInvitationCreate, CompanyInvitationOut, CompanyInvitationAccept,
-    CompanySelectionRequest, AuthContext, RefreshTokenRequest
+    CompanyInvitationAcceptExisting, InvitationInfo,
+    CompanySelectionRequest, AuthContext, RefreshTokenRequest,
+    UserUpdate, ImageUploadResponse, CompanyUsersResponse
 )
 
 auth_router = APIRouter()
@@ -175,6 +177,40 @@ async def accept_company_invitation(
         "company_name": company.name
     }
 
+@auth_router.post("/accept-invitation/existing", response_model=dict)
+async def accept_company_invitation_existing_user(
+    acceptance_data: CompanyInvitationAcceptExisting,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Aceptar invitación a empresa para usuario ya autenticado.
+    """
+    auth_service = AuthService(db)
+    company = auth_service.accept_invitation_existing_user(
+        token=acceptance_data.token,
+        user_id=current_user.id
+    )
+    
+    return {
+        "message": "Te has unido a la empresa exitosamente",
+        "company_id": str(company.id),
+        "company_name": company.name
+    }
+
+@auth_router.get("/invitation/{token}", response_model=InvitationInfo)
+async def get_invitation_info(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener información sobre una invitación.
+    Útil para que el frontend determine si el usuario debe registrarse o solo aceptar.
+    """
+    auth_service = AuthService(db)
+    info = auth_service.get_invitation_info(token)
+    return InvitationInfo(**info)
+
 @auth_router.get("/invitations", response_model=List[CompanyInvitationOut])
 async def get_pending_invitations(
     auth_context: AuthContext = Depends(require_owner_or_admin()),
@@ -194,6 +230,44 @@ async def get_pending_invitations(
     auth_service = AuthService(db)
     return auth_service.list_invitations(company_id=auth_context.tenant_id, limit=limit, offset=offset)
 
+@auth_router.get("/company/users", response_model=CompanyUsersResponse)
+async def get_company_users(
+    page: int = 1,
+    limit: int = 25,
+    auth_context: AuthContext = Depends(require_owner_or_admin()),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener lista de usuarios de la empresa con paginación.
+    Requiere rol de owner o admin.
+    """
+    if not auth_context.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Se requiere seleccionar una empresa"
+        )
+    
+    if page < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La página debe ser mayor a 0"
+        )
+    
+    if limit < 1 or limit > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El límite debe estar entre 1 y 100"
+        )
+    
+    auth_service = AuthService(db)
+    result = auth_service.get_company_users(
+        company_id=auth_context.tenant_id,
+        page=page,
+        limit=limit
+    )
+    
+    return CompanyUsersResponse(**result)
+
 @auth_router.post("/logout", response_model=dict)
 async def logout():
     """
@@ -208,6 +282,44 @@ async def refresh_token(body: RefreshTokenRequest, db: Session = Depends(get_db)
     """
     auth_service = AuthService(db)
     return auth_service.refresh_access_token(body.refresh_token)
+
+
+@auth_router.patch("/me", response_model=UserOut)
+async def update_user_profile(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Actualizar información del perfil del usuario actual.
+    No permite cambiar DNI.
+    """
+    auth_service = AuthService(db)
+    return auth_service.update_user_profile(current_user.id, user_update)
+
+
+@auth_router.post("/me/avatar", response_model=ImageUploadResponse)
+async def upload_user_avatar(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    file: UploadFile = File(...)
+):
+    """
+    Subir avatar del usuario actual.
+    """
+    auth_service = AuthService(db)
+    return auth_service.upload_user_avatar(current_user.id, file)
+
+@auth_router.get("/me/avatar")
+async def get_user_avatar(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener URL temporal para acceder al avatar del usuario actual.
+    """
+    auth_service = AuthService(db)
+    return auth_service.get_user_avatar_url(current_user.id)
 
 @auth_router.get("/health")
 def auth_health():

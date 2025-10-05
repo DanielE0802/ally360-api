@@ -2,8 +2,7 @@ from app.modules.products.schemas import LowStockProduct, LowStockResponse
 async def get_low_stock_products(db, tenant_id: str) -> LowStockResponse:
     """Return products with stock below min_stock for the tenant."""
     from sqlalchemy import select, and_
-    from app.modules.products.models import Product
-    from app.modules.inventory.models import Stock
+    from app.modules.products.models import Product, Stock
     from app.modules.pdv.models import PDV
 
     query = (
@@ -12,7 +11,7 @@ async def get_low_stock_products(db, tenant_id: str) -> LowStockResponse:
         .join(PDV, Stock.pdv_id == PDV.id)
         .where(
             Product.tenant_id == tenant_id,
-            Stock.current_stock <= Stock.min_stock
+            Stock.quantity <= Stock.min_quantity
         )
     )
     result = await db.execute(query)
@@ -22,8 +21,8 @@ async def get_low_stock_products(db, tenant_id: str) -> LowStockResponse:
             id=str(product.id),
             name=product.name,
             sku=product.sku,
-            current_stock=stock.current_stock,
-            min_stock=stock.min_stock,
+            current_stock=stock.quantity,
+            min_stock=stock.min_quantity,
             pdv_id=str(pdv.id),
             pdv_name=pdv.name
         ))

@@ -475,6 +475,86 @@ class AuthService:
         self.db.commit()
         return user, invitation.company
 
+    def accept_invitation_existing_user(self, token: str, user_id: UUID) -> Company:
+        """Accept invitation for existing authenticated user."""
+        invitation = self.db.query(CompanyInvitation).options(
+            selectinload(CompanyInvitation.company)
+        ).filter(
+            CompanyInvitation.token == token,
+            CompanyInvitation.is_accepted == False,
+            CompanyInvitation.expires_at > datetime.now(timezone.utc)
+        ).first()
+
+        if not invitation:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invitación inválida o expirada"
+            )
+
+        # Verificar que el usuario actual es el invitado
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user or user.email != invitation.invitee_email:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Esta invitación no corresponde a tu cuenta"
+            )
+
+        # Verificar si ya existe la relación usuario-empresa
+        existing_relation = self.db.query(UserCompany).filter(
+            UserCompany.user_id == user_id,
+            UserCompany.company_id == invitation.company_id
+        ).first()
+
+        if existing_relation:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ya eres miembro de esta empresa"
+            )
+
+        # Crear relación usuario-empresa
+        user_company = UserCompany(
+            user_id=user_id,
+            company_id=invitation.company_id,
+            role=invitation.role,
+            is_active=True
+        )
+        self.db.add(user_company)
+
+        # Marcar invitación como aceptada
+        invitation.is_accepted = True
+        invitation.accepted_at = datetime.now(timezone.utc)
+
+        self.db.commit()
+        return invitation.company
+
+    def get_invitation_info(self, token: str) -> dict:
+        """Get information about an invitation token."""
+        invitation = self.db.query(CompanyInvitation).options(
+            selectinload(CompanyInvitation.company)
+        ).filter(
+            CompanyInvitation.token == token,
+            CompanyInvitation.is_accepted == False,
+            CompanyInvitation.expires_at > datetime.now(timezone.utc)
+        ).first()
+
+        if not invitation:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invitación inválida o expirada"
+            )
+
+        # Check if user already exists
+        existing_user = self.db.query(User).filter(User.email == invitation.invitee_email).first()
+
+        return {
+            "company_name": invitation.company.name,
+            "company_id": invitation.company_id,
+            "invitee_email": invitation.invitee_email,
+            "role": invitation.role,
+            "user_exists": existing_user is not None,
+            "expires_at": invitation.expires_at
+        }
+
     def list_invitations(
         self,
         company_id: UUID,
@@ -505,6 +585,54 @@ class AuthService:
                 "company_name": inv.company.name if inv.company else ""
             })
         return results
+
+    def get_company_users(
+        self,
+        company_id: UUID,
+        page: int = 1,
+        limit: int = 25
+    ) -> dict:
+        """Get all users from a company with pagination."""
+        offset = (page - 1) * limit
+        
+        # Query to get users in the company with their profile and role
+        query = self.db.query(User, UserCompany).join(
+            UserCompany, User.id == UserCompany.user_id
+        ).options(
+            selectinload(User.profile)
+        ).filter(
+            UserCompany.company_id == company_id
+        ).order_by(User.created_at.desc())
+        
+        # Get total count
+        total = query.count()
+        
+        # Get paginated results
+        results = query.offset(offset).limit(limit).all()
+        
+        # Format the response
+        users = []
+        for user, user_company in results:
+            users.append({
+                "id": user.id,
+                "email": user.email,
+                "is_active": user.is_active,
+                "email_verified": user.email_verified,
+                "profile": user.profile,
+                "role": user_company.role,
+                "is_user_active": user_company.is_active,
+                "joined_at": user_company.created_at
+            })
+        
+        total_pages = (total + limit - 1) // limit
+        
+        return {
+            "users": users,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages
+        }
 
     def refresh_access_token(self, refresh_token: str) -> TokenResponse:
         """Generar un nuevo access token a partir de un refresh token válido."""
@@ -550,4 +678,142 @@ class AuthService:
             user=UserOut.from_orm(user),
             companies=companies
         )
+
+    def update_user_profile(self, user_id: UUID, user_update) -> UserOut:
+        """
+        Update user profile information.
+        DNI cannot be updated.
+        """
+        user = self.db.query(User).options(selectinload(User.profile)).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no encontrado"
+            )
+
+        if user_update.profile:
+            profile = user.profile
+            if not profile:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Perfil no encontrado"
+                )
+
+            # Update only provided fields, excluding DNI
+            if user_update.profile.first_name is not None:
+                profile.first_name = user_update.profile.first_name
+            if user_update.profile.last_name is not None:
+                profile.last_name = user_update.profile.last_name
+            if user_update.profile.phone_number is not None:
+                profile.phone_number = user_update.profile.phone_number
+
+            self.db.commit()
+            self.db.refresh(user)
+
+        return UserOut.from_orm(user)
+
+    def upload_user_avatar(self, user_id: UUID, file):
+        """
+        Upload user avatar to MinIO and update profile.
+        """
+        from app.modules.files.service import upload_file_to_minio
+        import uuid
+
+        # Validate file type
+        if not file.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Solo se permiten archivos de imagen"
+            )
+
+        # Get user profile
+        user = self.db.query(User).options(selectinload(User.profile)).filter(User.id == user_id).first()
+        if not user or not user.profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario o perfil no encontrado"
+            )
+
+        # Generate unique filename
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+        unique_filename = f"avatar_{uuid.uuid4()}.{file_extension}"
+        file_key = f"avatars/{user_id}/{unique_filename}"
+
+        try:
+            # Upload to MinIO
+            file_url = upload_file_to_minio(
+                file=file,
+                bucket_name="ally360",
+                object_key=file_key
+            )
+
+            # Update profile avatar_url
+            user.profile.avatar_url = file_url
+            self.db.commit()
+
+            return {
+                "message": "Avatar subido exitosamente",
+                "avatar_url": file_url
+            }
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error al subir avatar: {str(e)}"
+            )
+
+    def get_user_avatar_url(self, user_id: UUID) -> dict:
+        """
+        Obtener URL temporal (presigned) para acceder al avatar del usuario.
+        """
+        try:
+            user = self.db.query(User).options(
+                selectinload(User.profile)
+            ).filter(User.id == user_id).first()
+
+            if not user or not user.profile:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Usuario o perfil no encontrado"
+                )
+
+            if not user.profile.avatar_url:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="El usuario no tiene avatar"
+                )
+
+            # Extraer la key de MinIO desde la URL almacenada
+            # La URL almacenada es algo como: http://localhost:9000/ally360/avatars/...
+            # Necesitamos extraer solo la parte: avatars/...
+            avatar_url = user.profile.avatar_url
+            if "/ally360/" in avatar_url:
+                object_key = avatar_url.split("/ally360/", 1)[1]
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="URL de avatar inválida"
+                )
+
+            from app.modules.files.service import get_presigned_download_url
+            
+            # Generar URL temporal válida por 1 hora
+            presigned_url = get_presigned_download_url(
+                bucket_name="ally360",
+                object_key=object_key,
+                expires_in_hours=1
+            )
+
+            return {
+                "avatar_url": presigned_url,
+                "expires_in": "1 hour"
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error al obtener avatar: {str(e)}"
+            )
 
