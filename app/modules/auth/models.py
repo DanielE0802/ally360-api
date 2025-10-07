@@ -17,6 +17,7 @@ class User(Base, TimestampMixin):
     email_verified = Column(Boolean, default=False)
     email_verified_at = Column(DateTime(timezone=True), nullable=True)
     last_login = Column(DateTime(timezone=True), nullable=True)
+    first_login = Column(Boolean, default=True)
 
     # Relationships
     profile_id = Column(UUID(as_uuid=True), ForeignKey("profiles.id"))

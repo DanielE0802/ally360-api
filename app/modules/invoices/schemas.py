@@ -5,6 +5,7 @@ from uuid import UUID
 from datetime import date, datetime
 from enum import Enum
 from app.modules.contacts.schemas import ContactForInvoice
+from app.common.validators import validate_colombia_phone, format_colombia_phone
 
 
 class InvoiceType(str, Enum):
@@ -33,6 +34,18 @@ class CustomerBase(BaseModel):
     phone: Optional[str] = Field(None, max_length=50)
     address: Optional[str] = None
 
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Teléfono inválido. Use formato colombiano: '
+                '+573XXXXXXXXX (móvil) o +576XXXXXXX/+575XXXXXXX/+574XXXXXXX/+572XXXXXXX/+571XXXXXXX (fijo)'
+            )
+        return format_colombia_phone(v)
+
 
 class CustomerCreate(CustomerBase):
     pass
@@ -44,6 +57,18 @@ class CustomerUpdate(BaseModel):
     document: Optional[str] = Field(None, max_length=50)
     phone: Optional[str] = Field(None, max_length=50)
     address: Optional[str] = None
+
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Teléfono inválido. Use formato colombiano: '
+                '+573XXXXXXXXX (móvil) o +576XXXXXXX/+575XXXXXXX/+574XXXXXXX/+572XXXXXXX/+571XXXXXXX (fijo)'
+            )
+        return format_colombia_phone(v)
 
 
 class CustomerOut(CustomerBase):

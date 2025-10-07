@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
+from app.common.validators import validate_colombia_phone, validate_colombia_cedula, format_colombia_phone, format_colombia_cedula
 
 # Base schemas
 class ProfileCreate(BaseModel):
@@ -10,15 +11,55 @@ class ProfileCreate(BaseModel):
     phone_number: Optional[str] = Field(None, max_length=20)
     dni: Optional[str] = Field(None, max_length=20)
 
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v):
+        if v is None or v.strip() == "":
+            return v
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Número de teléfono inválido. Use formato colombiano: '
+                '+573XXXXXXXXX (móvil) o +571XXXXXXX (fijo), también acepta sin +57'
+            )
+        return format_colombia_phone(v)
+
+    @field_validator('dni')
+    @classmethod
+    def validate_dni(cls, v):
+        if v is None or v.strip() == "":
+            return v
+        if not validate_colombia_cedula(v):
+            raise ValueError(
+                'Cédula inválida. Debe ser una cédula colombiana válida '
+                '(7-10 dígitos, no puede empezar con 0)'
+            )
+        return format_colombia_cedula(v)
+
 class ProfileUpdate(BaseModel):
     first_name: Optional[str] = Field(None, min_length=2, max_length=50)
     last_name: Optional[str] = Field(None, min_length=2, max_length=50)
     phone_number: Optional[str] = Field(None, max_length=20)
     # DNI is excluded - cannot be updated
 
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v):
+        if v is None or v.strip() == "":
+            return v
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Número de teléfono inválido. Use formato colombiano: '
+                '+573XXXXXXXXX (móvil) o +571XXXXXXX (fijo), también acepta sin +57'
+            )
+        return format_colombia_phone(v)
+
 class UserUpdate(BaseModel):
     """Schema for updating user information. Email and password changes require separate endpoints."""
     profile: Optional[ProfileUpdate] = None
+
+class UserFirstLoginUpdate(BaseModel):
+    """Schema for updating first_login flag after user completes onboarding."""
+    first_login: bool = Field(..., description="Set to False after user completes onboarding")
 
 class ImageUploadResponse(BaseModel):
     message: str
@@ -58,6 +99,7 @@ class UserOut(BaseModel):
     email: EmailStr
     is_active: bool
     email_verified: bool
+    first_login: bool
     profile: ProfileOut
 
     class Config:
@@ -121,6 +163,20 @@ class EmailVerificationRequest(BaseModel):
 
 class EmailVerificationConfirm(BaseModel):
     token: str
+
+class EmailVerificationWithAutoLogin(BaseModel):
+    token: str
+    auto_login: bool = False
+
+class EmailVerificationResponse(BaseModel):
+    message: str
+    user_id: str
+    is_active: bool
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    token_type: Optional[str] = None
+    expires_in: Optional[int] = None
+    tenant_id: Optional[str] = None
 
 # Password reset schemas  
 class PasswordResetRequest(BaseModel):

@@ -1,23 +1,92 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 from uuid import UUID
+import re
+from app.common.validators import validate_colombia_phone, validate_colombia_nit_base, format_colombia_phone, format_colombia_nit_base
 
 class CompanyCreate(BaseModel):
     name: str
     description: Optional[str] = None
     address: Optional[str] = None
     phone_number: str
-    nit: str
+    nit: str = Field(..., description="NIT colombiano sin dígito de verificación (ej: 901886184)")
     economic_activity: Optional[str] = None
-    quantity_employees: int = Field(default=1, ge=0, description="Number of employees, must be a non-negative integer")
+    quantity_employees: str = Field(default="1-10", description="Number of employees range, e.g., '1-10', '50-100', '500+'")
     social_reason: Optional[str] = None
     logo: Optional[str] = None
+    uniquePDV: bool = Field(default=False, description="Create a main PDV automatically with company information")
+    
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v):
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Número de teléfono inválido. Use formato colombiano: '
+                '+573XXXXXXXXX (móvil) o +571XXXXXXX (fijo), también acepta sin +57'
+            )
+        return format_colombia_phone(v)
+    
+    @field_validator('nit')
+    @classmethod
+    def validate_nit(cls, v):
+        if not validate_colombia_nit_base(v):
+            raise ValueError(
+                'NIT inválido. Debe ser un NIT colombiano válido sin dígito de verificación. '
+                'Formato: XXXXXXXXX (8-10 dígitos, ej: 901886184)'
+            )
+        return format_colombia_nit_base(v)
+    
+    @field_validator('quantity_employees')
+    @classmethod
+    def validate_quantity_employees(cls, v):
+        if not v:
+            raise ValueError('Cantidad de empleados es requerida')
+        
+        # Patrones válidos: "1-10", "50-100", "500+", "1000+"
+        patterns = [
+            r'^\d+-\d+$',  # Rango: 1-10, 50-100
+            r'^\d+\+$',    # Más de: 500+, 1000+
+            r'^\d+$'       # Número específico: 5, 50
+        ]
+        
+        if any(re.match(pattern, v.strip()) for pattern in patterns):
+            return v.strip()
+        
+        raise ValueError('Formato inválido. Use: "1-10", "50-100", "500+" o un número específico')
     
     class Config:
         from_attributes = True
 
-class CompanyOut(CompanyCreate):
+class CompanyOut(BaseModel):
     id: UUID
+    name: str
+    description: Optional[str] = None
+    address: Optional[str] = None
+    phone_number: str
+    nit: str = Field(..., description="NIT colombiano sin dígito de verificación")
+    economic_activity: Optional[str] = None
+    quantity_employees: str = Field(default="1-10", description="Number of employees range, e.g., '1-10', '50-100', '500+'")
+    social_reason: Optional[str] = None
+    logo: Optional[str] = None
+    uniquePDV: bool = Field(default=False, description="Create a main PDV automatically with company information")
+
+    class Config:
+        from_attributes = True
+
+class CompanyCreateResponse(BaseModel):
+    """Response schema for company creation with PDV creation info"""
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    address: Optional[str] = None
+    phone_number: str
+    nit: str = Field(..., description="NIT colombiano sin dígito de verificación")
+    economic_activity: Optional[str] = None
+    quantity_employees: str
+    social_reason: Optional[str] = None
+    logo: Optional[str] = None
+    uniquePDV: bool
+    main_pdv_created: bool = Field(description="Indicates if a main PDV was created automatically")
 
     class Config:
         from_attributes = True
@@ -29,10 +98,40 @@ class CompanyUpdate(BaseModel):
     address: Optional[str] = None
     phone_number: Optional[str] = None
     economic_activity: Optional[str] = None
-    quantity_employees: Optional[int] = Field(None, ge=0, description="Number of employees, must be a non-negative integer")
+    quantity_employees: Optional[str] = Field(None, description="Number of employees range, e.g., '1-10', '50-100', '500+'")
     social_reason: Optional[str] = None
     # NIT is excluded - cannot be updated
     # logo will be handled by separate image upload endpoint
+
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v):
+        if v is None:
+            return v
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Número de teléfono inválido. Use formato colombiano: '
+                '+573XXXXXXXXX (móvil) o +571XXXXXXX (fijo), también acepta sin +57'
+            )
+        return format_colombia_phone(v)
+
+    @field_validator('quantity_employees')
+    @classmethod
+    def validate_quantity_employees(cls, v):
+        if v is None:
+            return v
+            
+        # Patrones válidos: "1-10", "50-100", "500+", "1000+"
+        patterns = [
+            r'^\d+-\d+$',  # Rango: 1-10, 50-100
+            r'^\d+\+$',    # Más de: 500+, 1000+
+            r'^\d+$'       # Número específico: 5, 50
+        ]
+        
+        if any(re.match(pattern, v.strip()) for pattern in patterns):
+            return v.strip()
+        
+        raise ValueError('Formato inválido. Use: "1-10", "50-100", "500+" o un número específico')
 
 class CompanyImageUploadResponse(BaseModel):
     message: str

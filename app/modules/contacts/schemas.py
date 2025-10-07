@@ -18,6 +18,7 @@ from uuid import UUID
 from datetime import date, datetime
 from enum import Enum
 from app.modules.auth.schemas import UserOut
+from app.common.validators import validate_colombia_phone, validate_colombia_cedula, validate_colombia_nit, format_colombia_phone, format_colombia_cedula, format_colombia_nit
 
 
 # ===== ENUMS =====
@@ -104,6 +105,72 @@ class ContactBase(BaseModel):
             pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
             if not re.match(pattern, v):
                 raise ValueError('Email debe tener formato válido')
+        return v
+
+    @field_validator('phone_primary')
+    @classmethod
+    def validate_phone_primary(cls, v):
+        if v is None or v.strip() == "":
+            return v
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Teléfono principal inválido. Use formato colombiano: '
+                '+573XXXXXXXXX (móvil) o +571XXXXXXX (fijo), también acepta sin +57'
+            )
+        return format_colombia_phone(v)
+
+    @field_validator('phone_secondary')
+    @classmethod
+    def validate_phone_secondary(cls, v):
+        if v is None or v.strip() == "":
+            return v
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Teléfono secundario inválido. Use formato colombiano: '
+                '+573XXXXXXXXX (móvil) o +571XXXXXXX (fijo), también acepta sin +57'
+            )
+        return format_colombia_phone(v)
+
+    @field_validator('mobile')
+    @classmethod
+    def validate_mobile(cls, v):
+        if v is None or v.strip() == "":
+            return v
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Celular inválido. Use formato colombiano: '
+                '+573XXXXXXXXX, también acepta sin +57'
+            )
+        return format_colombia_phone(v)
+
+    @field_validator('id_number')
+    @classmethod
+    def validate_id_number(cls, v):
+        if v is None or v.strip() == "":
+            return v
+        
+        # Para CC (Cédula de Ciudadanía), validar como cédula colombiana
+        # Para NIT, se validará en el model_validator junto con el DV
+        v_clean = v.strip()
+        
+        # Si es solo números y longitud de cédula, validar como cédula
+        if v_clean.isdigit() and 7 <= len(v_clean) <= 10:
+            if not validate_colombia_cedula(v_clean):
+                raise ValueError(
+                    'Cédula inválida. Debe ser una cédula colombiana válida '
+                    '(7-10 dígitos, no puede empezar con 0)'
+                )
+            return format_colombia_cedula(v_clean)
+        
+        # Para NITs con guión, validar completo
+        if '-' in v_clean:
+            if not validate_colombia_nit(v_clean):
+                raise ValueError(
+                    'NIT inválido. Debe ser un NIT colombiano válido con dígito de verificación correcto. '
+                    'Formato: XXXXXXXXX-X'
+                )
+            return format_colombia_nit(v_clean)
+        
         return v
 
     @field_validator('type')

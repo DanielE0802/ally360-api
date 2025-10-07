@@ -18,6 +18,7 @@ from uuid import UUID
 from datetime import date, datetime
 from enum import Enum
 from app.modules.contacts.schemas import ContactForBill
+from app.common.validators import validate_colombia_phone, format_colombia_phone
 
 
 # ===== ENUMS =====
@@ -78,6 +79,18 @@ class SupplierBase(BaseModel):
                 raise ValueError('Email debe tener formato válido')
         return v
 
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Teléfono inválido. Use formato colombiano: '
+                '+573XXXXXXXXX (móvil) o +576XXXXXXX/+575XXXXXXX/+574XXXXXXX/+572XXXXXXX/+571XXXXXXX (fijo)'
+            )
+        return format_colombia_phone(v)
+
 
 class SupplierCreate(SupplierBase):
     """DEPRECATED: Use ContactCreate from contacts module instead"""
@@ -99,6 +112,18 @@ class SupplierUpdate(BaseModel):
             if '@' not in v or '.' not in v:
                 raise ValueError('Email debe tener formato válido')
         return v
+
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        if not validate_colombia_phone(v):
+            raise ValueError(
+                'Teléfono inválido. Use formato colombiano: '
+                '+573XXXXXXXXX (móvil) o +576XXXXXXX/+575XXXXXXX/+574XXXXXXX/+572XXXXXXX/+571XXXXXXX (fijo)'
+            )
+        return format_colombia_phone(v)
 
 
 class SupplierOut(SupplierBase):

@@ -9,12 +9,12 @@ from app.modules.auth.dependencies import get_current_user, get_auth_context, re
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
     UserCreate, UserLogin, UserOut, TokenResponse, ContextTokenResponse,
-    EmailVerificationRequest, EmailVerificationConfirm,
+    EmailVerificationRequest, EmailVerificationConfirm, EmailVerificationWithAutoLogin, EmailVerificationResponse,
     PasswordResetRequest, PasswordResetConfirm,
     CompanyInvitationCreate, CompanyInvitationOut, CompanyInvitationAccept,
     CompanyInvitationAcceptExisting, InvitationInfo,
     CompanySelectionRequest, AuthContext, RefreshTokenRequest,
-    UserUpdate, ImageUploadResponse, CompanyUsersResponse
+    UserUpdate, UserFirstLoginUpdate, ImageUploadResponse, CompanyUsersResponse
 )
 
 auth_router = APIRouter()
@@ -34,19 +34,37 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         "user_id": str(user.id)
     }
 
-@auth_router.post("/verify-email", response_model=dict)
-async def verify_email(verification_data: EmailVerificationConfirm, db: Session = Depends(get_db)):
+@auth_router.post("/verify-email", response_model=EmailVerificationResponse)
+async def verify_email(verification_data: EmailVerificationWithAutoLogin, db: Session = Depends(get_db)):
     """
     Verificar email con token.
+    Si auto_login=true, genera tokens de acceso automáticamente para un flujo sin interrupciones.
     """
     auth_service = AuthService(db)
-    user = auth_service.verify_email(verification_data.token)
+    result = auth_service.verify_email_with_auto_login(
+        token=verification_data.token,
+        auto_login=verification_data.auto_login
+    )
     
-    return {
-        "message": "Email verificado exitosamente",
-        "user_id": str(user.id),
-        "is_active": user.is_active
-    }
+    return EmailVerificationResponse(**result)
+
+@auth_router.get("/verify-email", response_model=EmailVerificationResponse)
+async def verify_email_get(
+    token: str,
+    auto_login: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Verificar email via GET (para links en correos).
+    Si auto_login=true, genera tokens de acceso automáticamente.
+    """
+    auth_service = AuthService(db)
+    result = auth_service.verify_email_with_auto_login(
+        token=token,
+        auto_login=auto_login
+    )
+    
+    return EmailVerificationResponse(**result)
 
 @auth_router.post("/resend-verification", response_model=dict)
 async def resend_verification_email(request_data: EmailVerificationRequest, db: Session = Depends(get_db)):
@@ -282,6 +300,21 @@ async def refresh_token(body: RefreshTokenRequest, db: Session = Depends(get_db)
     """
     auth_service = AuthService(db)
     return auth_service.refresh_access_token(body.refresh_token)
+
+
+@auth_router.patch("/me/first-login", response_model=UserOut)
+async def update_first_login(
+    first_login_update: UserFirstLoginUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Actualizar el estado de first_login del usuario.
+    Usado cuando el usuario completa el onboarding/step-by-step.
+    """
+    auth_service = AuthService(db)
+    updated_user = auth_service.update_first_login(current_user.id, first_login_update.first_login)
+    return UserOut.from_orm(updated_user)
 
 
 @auth_router.patch("/me", response_model=UserOut)

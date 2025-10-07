@@ -16,7 +16,7 @@ class Company(Base):
     nit = Column(String(50), unique=True, nullable=False)
     social_reason = Column(String, nullable=True)
     logo = Column(String, nullable=True)
-    quantity_employees = Column(Integer, default=0)
+    quantity_employees = Column(String, default="1-10")
     economic_activity = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

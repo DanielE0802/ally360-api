@@ -7,30 +7,72 @@ from app.modules.auth.models import User, UserCompany
 from app.modules.company.models import Company
 from uuid import UUID
 
-def create_company(db: db_dependency, company_data: CompanyCreate, current_user: User) -> Company:
+def create_company(db: db_dependency, company_data: CompanyCreate, current_user: User) -> dict:
     """
     Create a new company in the database.
+    Optionally creates a main PDV if uniquePDV is True.
 
     Args:
         company_data (CompanyCreate): The company data to create.
+        current_user (User): The current user creating the company.
 
     Returns:
-        Company: The created company object.
+        dict: The created company object with additional info.
     """
 
     if db.query(Company).filter_by(name=company_data.name).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Company name already exists")
 
-    company = Company(**company_data.model_dump())
+    # Extract uniquePDV flag before creating company
+    unique_pdv = company_data.uniquePDV
+    company_dict = company_data.model_dump()
+    del company_dict['uniquePDV']  # Remove from company data as it's not a company field
+
+    company = Company(**company_dict)
     db.add(company)
     db.flush()
 
     user_company = UserCompany(user_id=current_user.id, company_id=company.id, is_active=True, role="admin")
     db.add(user_company)
+    
+    main_pdv_created = False
+    
+    # If uniquePDV is True, create a main PDV with company information
+    if unique_pdv:
+        from app.modules.pdv.models import PDV
+        
+        main_pdv = PDV(
+            tenant_id=company.id,  # Company ID acts as tenant_id
+            name="Principal",  # Default name for main PDV
+            address=company.address or "Dirección principal",
+            phone_number=company.phone_number,
+            is_main=True,
+            is_active=True
+        )
+        db.add(main_pdv)
+        main_pdv_created = True
+        
+        # Initialize stock for this PDV if needed
+        try:
+            from app.modules.inventory.service import InventoryService
+            inventory_service = InventoryService(db)
+            db.flush()  # Ensure PDV has an ID
+            inventory_service.create_stock_for_new_pdv(str(company.id), main_pdv.id)
+        except Exception as e:
+            # If inventory service fails, log but don't fail company creation
+            print(f"Warning: Could not initialize stock for main PDV: {e}")
+
     db.commit()
     db.refresh(company)
 
-    return company
+    # Prepare response with company data and additional info
+    company_dict = {
+        **company_data.model_dump(),
+        "id": company.id,
+        "main_pdv_created": main_pdv_created
+    }
+
+    return company_dict
 
 def assign_user_to_company(db: db_dependency, assignment: AssignUserToCompany) -> dict:
     """
@@ -171,6 +213,60 @@ def update_company(db, company_update, current_user):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No tienes permisos para actualizar esta empresa"
+        )
+
+    company = user_company.company
+
+    # Update only provided fields, excluding NIT
+    if company_update.name is not None:
+        # Check if name already exists (excluding current company)
+        existing = db.query(Company).filter(
+            Company.name == company_update.name,
+            Company.id != company.id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ya existe una empresa con este nombre"
+            )
+        company.name = company_update.name
+
+    if company_update.description is not None:
+        company.description = company_update.description
+    if company_update.address is not None:
+        company.address = company_update.address
+    if company_update.phone_number is not None:
+        company.phone_number = company_update.phone_number
+    if company_update.economic_activity is not None:
+        company.economic_activity = company_update.economic_activity
+    if company_update.quantity_employees is not None:
+        company.quantity_employees = company_update.quantity_employees
+    if company_update.social_reason is not None:
+        company.social_reason = company_update.social_reason
+
+    db.commit()
+    db.refresh(company)
+    return company
+
+
+def update_company_by_id(db, company_id: UUID, company_update, current_user):
+    """
+    Update company information by ID with ownership validation.
+    Only users with owner or admin role can update company data.
+    NIT cannot be updated.
+    """
+    # Verify user has access to this company
+    user_company = db.query(UserCompany).join(Company).filter(
+        UserCompany.user_id == current_user.id,
+        UserCompany.company_id == company_id,
+        UserCompany.is_active == True,
+        UserCompany.role.in_(["admin", "owner"])
+    ).first()
+    
+    if not user_company:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para actualizar esta empresa o la empresa no existe"
         )
 
     company = user_company.company

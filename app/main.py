@@ -24,6 +24,8 @@ from app.modules.bills.router import bills_router
 from app.modules.contacts.router import router as contacts_router
 from app.modules.files.router_simple import router as files_router
 from app.modules.email.router import router as email_router
+from app.modules.locations.router import router as locations_router
+from app.modules.subscriptions.router import router as subscriptions_router
 from app.modules.pos.routers import (
     cash_registers_router, 
     cash_movements_router, 
@@ -50,6 +52,8 @@ import app.modules.bills.models
 import app.modules.contacts.models
 import app.modules.files.models
 import app.modules.pos.models
+import app.modules.locations.models
+import app.modules.subscriptions.models
 import app.modules.reports  # Import module to register models
 
 from app.core.config import settings
@@ -83,13 +87,15 @@ app.add_middleware(TenantMiddleware)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:8080", "http://localhost:4173", "https://ally360.netlify.app"],  # Add your frontend URLs
+    allow_origins=["http://localhost:5173","http://localhost:5174", "http://localhost:8080", "http://localhost:4173", "https://ally360.netlify.app"],  # Add your frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include routers
+app.include_router(locations_router)  # Public endpoint - no prefix needed
+app.include_router(subscriptions_router)  # Subscription management
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 app.include_router(company_router, prefix="/company", tags=["Companies"])
 app.include_router(categories_router, prefix="/categories", tags=["Categories"])

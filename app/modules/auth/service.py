@@ -103,7 +103,8 @@ class AuthService:
             user_email=user.email,
             user_name=user.profile.first_name,
             verification_token=verification_token,
-            company_name=None
+            company_name=None,
+            auto_login=True  # Por defecto, habilitar auto-login
         )
 
         return user, verification_token
@@ -134,6 +135,52 @@ class AuthService:
 
         self.db.commit()
         return user
+
+    def verify_email_with_auto_login(self, token: str, auto_login: bool = False) -> dict:
+        """
+        Verificar email con opción de auto-login.
+        Si auto_login=True, genera tokens de acceso automáticamente.
+        """
+        # Verificar email normalmente
+        user = self.verify_email(token)
+        
+        response = {
+            "message": "Email verificado exitosamente",
+            "user_id": str(user.id),
+            "is_active": user.is_active
+        }
+        
+        if auto_login:
+            # Buscar si el usuario pertenece a alguna empresa
+            user_company = self.db.query(UserCompany).filter(
+                UserCompany.user_id == user.id,
+                UserCompany.is_active == True
+            ).first()
+            
+            tenant_id = user_company.company_id if user_company else None
+            
+            # Generar tokens
+            access_token_data = {
+                "sub": str(user.id),
+                "email": user.email,
+                "user_name": user.profile.full_name if user.profile else user.email,
+                "tenant_id": str(tenant_id) if tenant_id else None,
+                "type": "access"
+            }
+            
+            access_token = create_access_token(data=access_token_data)
+            refresh_token = create_refresh_token(user_id=str(user.id))
+            
+            response.update({
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "bearer",
+                "expires_in": 1800000,  # 30 minutes in milliseconds
+                "tenant_id": str(tenant_id) if tenant_id else None,
+                "message": "Email verificado y sesión iniciada automáticamente"
+            })
+        
+        return response
 
     def resend_verification(self, email: str) -> bool:
         """Reenviar email de verificación si el usuario aún no ha verificado."""
@@ -169,8 +216,58 @@ class AuthService:
             user_email=user.email,
             user_name=user.profile.first_name if user.profile else user.email,
             verification_token=verification_token,
-            company_name=None
+            company_name=None,
+            auto_login=True  # Por defecto, habilitar auto-login
         )
+        return True
+
+    def send_verification_email(self, user_id: UUID, auto_login: bool = True) -> bool:
+        """
+        Enviar email de verificación con control de auto_login.
+        Útil para casos específicos donde se quiere controlar el comportamiento.
+        """
+        user = self.db.query(User).options(selectinload(User.profile)).filter(User.id == user_id).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no encontrado"
+            )
+        
+        if user.email_verified:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El email ya está verificado"
+            )
+        
+        # Generar nuevo token
+        verification_token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+        expires_at = datetime.now(timezone.utc) + timedelta(days=1)
+        
+        # Limpiar tokens anteriores
+        self.db.query(EmailVerificationToken).filter(
+            EmailVerificationToken.user_id == user.id,
+            EmailVerificationToken.is_used == False
+        ).update({"is_used": True, "used_at": datetime.now(timezone.utc)})
+        
+        # Crear nuevo token
+        email_token = EmailVerificationToken(
+            user_id=user.id,
+            token=verification_token,
+            expires_at=expires_at
+        )
+        self.db.add(email_token)
+        self.db.commit()
+        
+        # Enviar email con auto_login controlado
+        send_verification_email_task.delay(
+            user_email=user.email,
+            user_name=user.profile.first_name if user.profile else user.email,
+            verification_token=verification_token,
+            company_name=None,
+            auto_login=auto_login
+        )
+        
         return True
 
     def login(self, email: str, password: str) -> TokenResponse:
@@ -816,4 +913,31 @@ class AuthService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error al obtener avatar: {str(e)}"
             )
+
+    def update_first_login(self, user_id: UUID, first_login: bool) -> User:
+        """
+        Update user's first_login status.
+        Used when user completes onboarding/step-by-step process.
+        
+        Args:
+            user_id: ID of the user to update
+            first_login: New first_login status (typically False after onboarding)
+            
+        Returns:
+            User: Updated user object
+        """
+        user = self.db.query(User).options(selectinload(User.profile)).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no encontrado"
+            )
+
+        user.first_login = first_login
+        user.updated_at = datetime.now(timezone.utc)
+        
+        self.db.commit()
+        self.db.refresh(user)
+        
+        return user
 

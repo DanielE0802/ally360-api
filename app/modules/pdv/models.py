@@ -16,8 +16,14 @@ class PDV(Base, TenantMixin, TimestampMixin):
     is_main = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     
+    # Location relationships
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
+    city_id = Column(Integer, ForeignKey("cities.id"), nullable=True, index=True)
+    
     # Relationships
     stocks = relationship("Stock", back_populates="pdv")
+    department = relationship("Department", foreign_keys=[department_id])
+    city = relationship("City", foreign_keys=[city_id])
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_pdv_tenant_name"),

@@ -98,19 +98,23 @@ def send_verification_email_task(
     user_email: str,
     user_name: str,
     verification_token: str,
-    company_name: Optional[str] = None
+    company_name: Optional[str] = None,
+    auto_login: bool = True
 ):
     """
     Enviar correo de verificación de cuenta.
+    Si auto_login=True, el link permitirá verificar e ingresar automáticamente.
     """
     try:
-        verification_url = f"{email_service.frontend_url}/verify-email?token={verification_token}"
+        # Construir URL con parámetro auto_login
+        verification_url = f"{email_service.frontend_url}/verify-email?token={verification_token}&auto_login={str(auto_login).lower()}"
         
         context = {
             "user_name": user_name,
             "verification_url": verification_url,
             "company_name": company_name,
-            "support_email": email_service.from_email
+            "support_email": email_service.from_email,
+            "auto_login": auto_login
         }
         
         success = email_service.send_template_email(

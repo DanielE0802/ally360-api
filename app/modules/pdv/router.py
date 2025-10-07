@@ -1,16 +1,3 @@
-from fastapi import APIRouter, HTTPException, status, Path, Depends
-from sqlalchemy.orm import Session
-from app.dependencies.dbDependecies import get_db
-from app.modules.auth.dependencies import get_auth_context, require_owner_or_admin, require_any_role
-from app.modules.auth.schemas import AuthContext
-from app.modules.pdv.models import PDV
-from app.modules.pdv.schemas import PDVcreate, PDVUpdate, PDVOutput, PDVList
-from app.modules.pdv import service
-from app.modules.inventory.service import InventoryService
-from uuid import UUID
-
-pdv_router = APIRouter(prefix="/pdvs", tags=["PDVs"])
-
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -28,6 +15,11 @@ def create_pdv(
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
+    """
+    Crear nuevo punto de venta (PDV).
+    
+    Solo usuarios con rol owner o admin pueden crear PDVs.
+    """
     return service.create_pdv(pdv, db, auth_context.tenant_id)
 
 @pdv_router.get("/", response_model=PDVList)
@@ -37,6 +29,11 @@ def get_all_pdvs(
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant"]))
 ):
+    """
+    Obtener lista de todos los PDVs de la empresa.
+    
+    Disponible para todos los roles autenticados.
+    """
     return service.get_all_pdvs(db, auth_context.tenant_id, limit, offset)
 
 @pdv_router.get("/{pdv_id}", response_model=PDVOutput)
@@ -45,6 +42,11 @@ def get_pdv_by_id(
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "accountant"]))
 ):
+    """
+    Obtener PDV por ID.
+    
+    Disponible para todos los roles autenticados.
+    """
     return service.get_pdv_by_id(pdv_id, db, auth_context.tenant_id)
 
 @pdv_router.patch("/{pdv_id}", response_model=PDVOutput)
@@ -54,6 +56,19 @@ def update_pdv(
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
+    """
+    Actualizar PDV existente.
+    
+    **Para editar PDV (similar a empresa).**
+    
+    Solo usuarios con rol owner o admin pueden editar PDVs.
+    
+    Campos que se pueden actualizar:
+    - name: Nombre del PDV
+    - address: Dirección
+    - phone_number: Teléfono (formato colombiano)
+    - is_active: Estado activo/inactivo
+    """
     return service.update_pdv(pdv_id, pdv_update, db, auth_context.tenant_id)
 
 @pdv_router.delete("/{pdv_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -62,83 +77,10 @@ def delete_pdv(
     db: Session = Depends(get_db),
     auth_context = Depends(AuthDependencies.require_role(["owner", "admin"]))
 ):
-    return service.delete_pdv(pdv_id, db, auth_context.tenant_id)
-
-
-
-@pdv_router.get("/", response_model=PDVList)
-def get_all_pdvs(
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(require_any_role())
-):
-    """Get all PDVs for company."""
-    if not auth_context.tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Company context required"
-        )
+    """
+    Eliminar PDV.
     
-    return service.get_all_pdvs(db, auth_context.tenant_id)
-
-@pdv_router.get("/current", response_model=PDVOutput)
-def get_current_pdv(
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(require_any_role())
-):
-    """Get current PDV from context (if available)."""
-    if not auth_context.tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Company context required"
-        )
-    
-    # TODO: Implement PDV context from JWT token
-    # For now, return main PDV
-    return service.get_main_pdv(db, auth_context.tenant_id)
-
-@pdv_router.get("/{pdv_id}", response_model=PDVOutput)
-def get_pdv_by_id(
-    pdv_id: UUID,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(require_any_role())
-):
-    """Get PDV by ID."""
-    if not auth_context.tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Company context required"
-        )
-    
-    return service.get_pdv_by_id(pdv_id, db, auth_context.tenant_id)
-
-@pdv_router.patch("/{pdv_id}", response_model=PDVOutput)
-def update_pdv(
-    pdv_id: UUID,
-    pdv_update: PDVUpdate,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(require_owner_or_admin())
-):
-    """Update PDV (owner/admin only)."""
-    if not auth_context.tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Company context required"
-        )
-    
-    return service.update_pdv(pdv_id, pdv_update, db, auth_context.tenant_id)
-
-@pdv_router.delete("/{pdv_id}", response_model=dict)
-def delete_pdv(
-    pdv_id: UUID,
-    db: Session = Depends(get_db),
-    auth_context: AuthContext = Depends(require_owner_or_admin())
-):
-    """Delete PDV (owner/admin only)."""
-    if not auth_context.tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Company context required"
-        )
-    
+    Solo usuarios con rol owner o admin pueden eliminar PDVs.
+    """
     return service.delete_pdv(pdv_id, db, auth_context.tenant_id)
 
