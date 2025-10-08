@@ -20,7 +20,7 @@ class PDV(Base, TenantMixin, TimestampMixin):
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True, index=True)
     city_id = Column(Integer, ForeignKey("cities.id"), nullable=True, index=True)
     
-    # Relationships
+    # Relationships - using strings to avoid circular imports
     stocks = relationship("Stock", back_populates="pdv")
     department = relationship("Department", foreign_keys=[department_id])
     city = relationship("City", foreign_keys=[city_id])

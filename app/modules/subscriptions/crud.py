@@ -3,7 +3,7 @@ CRUD operations for subscription management.
 """
 from typing import List, Optional
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc, asc, or_, func
@@ -169,7 +169,7 @@ async def get_active_subscription(
                 ]),
                 or_(
                     Subscription.end_date.is_(None),
-                    Subscription.end_date > datetime.utcnow()
+                    Subscription.end_date > datetime.now(timezone.utc)
                 )
             )
         )
@@ -215,7 +215,7 @@ async def create_subscription(
         raise ValueError("Plan no encontrado")
     
     # Calcular fechas y montos
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     start_date = subscription_data.start_date or now
     
     # Determinar si es trial
@@ -338,7 +338,7 @@ async def cancel_subscription(
     if not subscription:
         return None
     
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     subscription.canceled_at = now
     subscription.canceled_reason = reason
     subscription.auto_renew = False
@@ -413,7 +413,7 @@ async def get_subscription_stats(db: AsyncSession, tenant_id: UUID) -> dict:
             "days_remaining": 0
         }
     
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     is_trial = current_sub.trial_end_date and current_sub.trial_end_date > now
     
     # Calcular días restantes

@@ -8,7 +8,7 @@ from sqlalchemy.sql import func
 from app.database.database import Base
 from app.common.mixins import TenantMixin
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -135,7 +135,7 @@ class Subscription(Base, TenantMixin):
         if self.status not in [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL]:
             return False
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if self.end_date and now > self.end_date:
             return False
             
@@ -152,7 +152,7 @@ class Subscription(Base, TenantMixin):
         if not self.end_date:
             return -1  # Indefinido
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if now > self.end_date:
             return 0
         

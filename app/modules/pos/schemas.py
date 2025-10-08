@@ -37,7 +37,26 @@ class PaymentMethod(str, Enum):
     CASH = "cash"
     TRANSFER = "transfer"
     CARD = "card"
+    QR_CODE = "qr_code"  # ← NUEVO
     OTHER = "other"
+
+
+class QRPaymentProvider(str, Enum):  # ← NUEVO
+    """Proveedores de pago QR soportados"""
+    NEQUI = "nequi"
+    DAVIPLATA = "daviplata"
+    BANCOLOMBIA_QR = "bancolombia_qr"
+    PSE = "pse"
+    GENERIC_QR = "generic_qr"
+
+
+class PaymentStatus(str, Enum):  # ← NUEVO
+    """Estados de procesamiento de pagos"""
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    REFUNDED = "refunded"
 
 
 # ===== CASH REGISTER SCHEMAS =====
@@ -324,3 +343,305 @@ class POSInvoiceDetail(POSInvoiceOut):
 
 # Forward references
 CashRegisterDetail.model_rebuild()
+
+
+# ===== ADVANCED PAYMENT SCHEMAS =====
+
+class MixedPaymentItem(BaseModel):
+    """Schema para un pago individual en pago mixto"""
+    method: PaymentMethod = Field(..., description="Método de pago")
+    amount: Decimal = Field(..., gt=0, description="Monto del pago")
+    reference: Optional[str] = Field(None, max_length=100, description="Referencia del pago")
+    notes: Optional[str] = Field(None, max_length=200, description="Notas del pago")
+
+    @field_validator('amount')
+    @classmethod
+    def validate_amount(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError('El monto debe ser mayor a cero')
+        return v
+
+
+class MixedPaymentRequest(BaseModel):
+    """Schema para solicitud de pago mixto"""
+    invoice_id: UUID = Field(..., description="ID de la factura a pagar")
+    payments: List[MixedPaymentItem] = Field(..., min_length=1, description="Lista de pagos")
+    cash_register_id: Optional[UUID] = Field(None, description="ID de caja (requerido si hay efectivo)")
+
+    @field_validator('payments')
+    @classmethod
+    def validate_payments(cls, v: List[MixedPaymentItem]) -> List[MixedPaymentItem]:
+        if not v:
+            raise ValueError('Debe incluir al menos un pago')
+        
+        # Validar que si hay efectivo, se proporcione cash_register_id
+        has_cash = any(p.method == PaymentMethod.CASH for p in v)
+        return v
+
+    @model_validator(mode='after')
+    def validate_cash_register(self):
+        has_cash = any(p.method == PaymentMethod.CASH for p in self.payments)
+        if has_cash and not self.cash_register_id:
+            raise ValueError('cash_register_id es requerido cuando hay pagos en efectivo')
+        return self
+
+
+class MixedPaymentResponse(BaseModel):
+    """Schema de respuesta para pago mixto"""
+    invoice_id: str = Field(description="ID de la factura pagada")
+    total_amount: float = Field(description="Total de la factura")
+    total_paid: float = Field(description="Total pagado")
+    change_amount: float = Field(description="Vuelto dado")
+    payments: List[Dict[str, Any]] = Field(description="Pagos procesados")
+    cash_movements: List[Dict[str, Any]] = Field(description="Movimientos de caja generados")
+    payment_summary: Dict[str, Any] = Field(description="Resumen por método de pago")
+
+
+class QRPaymentRequest(BaseModel):
+    """Schema para solicitud de pago QR"""
+    invoice_id: UUID = Field(..., description="ID de la factura")
+    amount: Decimal = Field(..., gt=0, description="Monto a pagar")
+    provider: QRPaymentProvider = Field(..., description="Proveedor de pago QR")
+    expires_in_minutes: int = Field(30, ge=5, le=120, description="Minutos de expiración")
+
+    @field_validator('amount')
+    @classmethod
+    def validate_amount(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError('El monto debe ser mayor a cero')
+        return v
+
+
+class QRPaymentResponse(BaseModel):
+    """Schema de respuesta para pago QR"""
+    qr_code: str = Field(description="Código único del QR")
+    qr_data: str = Field(description="Datos del QR para generar imagen")
+    amount: float = Field(description="Monto a pagar")
+    provider: str = Field(description="Proveedor de pago")
+    invoice_id: str = Field(description="ID de la factura")
+    expires_at: str = Field(description="Fecha de expiración ISO")
+    status: str = Field(description="Estado del pago")
+    created_at: str = Field(description="Fecha de creación ISO")
+    instructions: Dict[str, Any] = Field(description="Instrucciones específicas del proveedor")
+
+
+class QRPaymentStatusRequest(BaseModel):
+    """Schema para consultar estado de pago QR"""
+    qr_code: str = Field(..., min_length=8, max_length=20, description="Código del QR")
+
+
+class QRPaymentStatusResponse(BaseModel):
+    """Schema de respuesta de estado de pago QR"""
+    qr_code: str = Field(description="Código del QR")
+    status: str = Field(description="Estado actual del pago")
+    last_check: str = Field(description="Última verificación ISO")
+    message: str = Field(description="Mensaje del estado")
+
+
+# Schemas para validación de métodos de pago
+class PaymentValidationResponse(BaseModel):
+    """Respuesta de validación de límites de pago"""
+    valid: bool
+    method: PaymentMethod
+    amount: Decimal
+    limit_exceeded: bool = False
+    daily_limit: Optional[Decimal] = None
+    current_daily_usage: Optional[Decimal] = None
+    remaining_daily_limit: Optional[Decimal] = None
+    warnings: List[str] = Field(default_factory=list)
+    
+    class Config:
+        from_attributes = True
+
+
+# ===============================
+# MULTI-CASH SCHEMAS (v1.3.0)
+# ===============================
+
+class MultiCashSessionCreate(BaseModel):
+    """Schema para crear sesión multi-caja"""
+    location_id: UUID = Field(description="ID del PDV/Ubicación")
+    primary_balance: Decimal = Field(ge=0, description="Saldo inicial caja principal")
+    secondary_balances: List[Decimal] = Field(
+        description="Saldos iniciales para cajas secundarias",
+        min_length=1,
+        max_length=5
+    )
+    session_notes: Optional[str] = Field(None, max_length=500, description="Notas de la sesión")
+    enable_load_balancing: bool = Field(True, description="Habilitar balanceamento automático")
+    allow_existing: bool = Field(False, description="Permitir cajas abiertas existentes")
+    
+    @field_validator('secondary_balances')
+    @classmethod
+    def validate_secondary_balances(cls, v):
+        if any(balance < 0 for balance in v):
+            raise ValueError("Todos los saldos deben ser no negativos")
+        return v
+
+class MultiCashSessionResponse(BaseModel):
+    """Respuesta de sesión multi-caja creada"""
+    session_id: UUID
+    location_id: UUID
+    primary_register: CashRegisterOut
+    secondary_registers: List[CashRegisterOut]
+    supervisor_id: UUID
+    created_at: datetime
+    status: str = Field(description="active, paused, closed")
+    load_balancing_enabled: bool
+    total_registers: int
+    
+    class Config:
+        from_attributes = True
+
+class LoadBalancingConfig(BaseModel):
+    """Configuración de balanceamento de carga"""
+    enabled: bool = True
+    algorithm: str = Field("round_robin", description="round_robin, least_loaded, sales_based")
+    max_sales_per_register: Optional[int] = Field(None, description="Máximo ventas por caja")
+    balance_threshold: Optional[Decimal] = Field(None, description="Umbral de balance para rebalanceo")
+    
+class ShiftTransferRequest(BaseModel):
+    """Request para transferencia de turno"""
+    location_id: UUID
+    register_ids: List[UUID] = Field(min_length=1, description="IDs de cajas a transferir")
+    new_operator_id: UUID = Field(description="ID del nuevo operador")
+    notes: Optional[str] = Field(None, max_length=500, description="Notas de transferencia")
+    
+class ShiftTransferResponse(BaseModel):
+    """Respuesta de transferencia de turno"""
+    transfer_id: UUID
+    location_id: UUID
+    from_user_id: UUID
+    to_user_id: UUID
+    transferred_registers: List[Dict[str, Any]]
+    transfer_time: datetime
+    notes: Optional[str]
+    status: str = Field(description="completed, pending, failed")
+    
+    class Config:
+        from_attributes = True
+
+class RegisterCloseData(BaseModel):
+    """Datos de cierre de caja individual"""
+    register_id: UUID
+    declared_balance: Decimal = Field(ge=0, description="Balance declarado en arqueo")
+    notes: Optional[str] = Field(None, max_length=500, description="Notas del cierre")
+
+class MultiCashSessionClose(BaseModel):
+    """Request para cerrar sesión multi-caja"""
+    session_id: UUID
+    register_closures: List[RegisterCloseData] = Field(min_length=1)
+    final_notes: Optional[str] = Field(None, max_length=1000, description="Notas finales de sesión")
+    
+class ConsolidatedAuditResponse(BaseModel):
+    """Respuesta de auditoría consolidada"""
+    audit_id: UUID
+    location_id: UUID
+    audit_date: date
+    registers_audited: int
+    total_opening_balance: Decimal
+    total_current_balance: Decimal
+    total_movements: int
+    total_sales_count: int
+    total_sales_amount: Decimal
+    average_ticket: Decimal
+    registers_detail: List[Dict[str, Any]]
+    recommendations: List[str]
+    audit_performed_by: Optional[UUID]
+    audit_performed_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# ===============================
+# REAL-TIME ANALYTICS SCHEMAS (v1.3.0)
+# ===============================
+
+class LiveDashboardResponse(BaseModel):
+    """Respuesta del dashboard en tiempo real"""
+    timestamp: datetime
+    location_id: Optional[UUID]
+    today_sales: Dict[str, Any]
+    current_hour_sales: Dict[str, Any]
+    active_registers: int
+    registers_detail: List[Dict[str, Any]]
+    hourly_breakdown: List[Dict[str, Any]]
+    top_products_today: List[Dict[str, Any]]
+    comparisons: Dict[str, Dict[str, Any]]
+    alerts: List['AlertResponse']
+    performance_indicators: Dict[str, Any]
+    
+    class Config:
+        from_attributes = True
+
+class AlertResponse(BaseModel):
+    """Respuesta de alerta del sistema"""
+    alert_id: UUID
+    type: str = Field(description="stock, sales, cash, system")
+    priority: str = Field(description="low, medium, high, critical")
+    title: str
+    message: str
+    location_id: Optional[UUID]
+    entity_id: Optional[UUID] = Field(None, description="ID de la entidad relacionada")
+    created_at: datetime
+    acknowledged: bool = False
+    acknowledged_by: Optional[UUID] = None
+    acknowledged_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+class SalesTargetCheck(BaseModel):
+    """Verificación de metas de ventas"""
+    check_date: date
+    location_id: Optional[UUID]
+    daily_progress: Optional[Dict[str, Any]]
+    monthly_progress: Optional[Dict[str, Any]]
+    recommendations: List[str]
+    
+    class Config:
+        from_attributes = True
+
+class PredictiveAnalyticsResponse(BaseModel):
+    """Respuesta de analytics predictivo"""
+    prediction_date: datetime
+    prediction_period_days: int
+    location_id: Optional[UUID]
+    sales_forecast: List[Dict[str, Any]]
+    trend_analysis: Dict[str, Any]
+    seasonal_patterns: Dict[str, Any]
+    stock_alerts: List[Dict[str, Any]]
+    demand_forecast: List[Dict[str, Any]]
+    confidence_level: float = Field(ge=0, le=1, description="Nivel de confianza de las predicciones")
+    recommendations: List[str]
+    
+    class Config:
+        from_attributes = True
+
+class LiveMetricsResponse(BaseModel):
+    """Respuesta de métricas en vivo"""
+    timestamp: datetime
+    location_id: Optional[UUID]
+    current_sales_count: int
+    current_revenue: Decimal
+    active_registers: int
+    sales_velocity: float = Field(description="Ventas por hora")
+    conversion_rate: Optional[float] = Field(None, description="Tasa de conversión estimada")
+    average_ticket: Decimal
+    peak_hour: Optional[int] = Field(None, description="Hora pico del día")
+    
+    class Config:
+        from_attributes = True
+
+class ComparativeAnalyticsResponse(BaseModel):
+    """Respuesta de analytics comparativo"""
+    comparison_period: str = Field(description="day, week, month, year")
+    period_name: str
+    current_period: Dict[str, Any]
+    previous_period: Dict[str, Any]
+    changes: Dict[str, Any]
+    analysis: List[str]
+    
+    class Config:
+        from_attributes = True

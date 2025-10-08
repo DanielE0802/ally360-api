@@ -21,4 +21,6 @@ class Company(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    # Relationships
     user_companies = relationship("UserCompany", back_populates="company")
+    pdvs = relationship("PDV", foreign_keys="PDV.tenant_id", primaryjoin="Company.id == PDV.tenant_id")

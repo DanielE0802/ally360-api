@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Path, UploadFile, File, Depends
 from sqlalchemy.orm import Session
 from app.modules.company import service
-from app.modules.company.schemas import CompanyCreate, CompanyOut, AssignUserToCompany, CompanyOutWithRole, CompanyUpdate, CompanyImageUploadResponse, CompanyLogoResponse, CompanyCreateResponse
+from app.modules.company.schemas import CompanyCreate, CompanyOut, AssignUserToCompany, CompanyOutWithRole, CompanyUpdate, CompanyImageUploadResponse, CompanyLogoResponse, CompanyCreateResponse, CompanyMeDetail
 from app.dependencies.dbDependecies import db_dependency, get_db
 from app.dependencies.userDependencies import user_dependency
 from app.modules.auth.dependencies import get_current_user
@@ -67,6 +67,28 @@ async def select_company(
     Select a company for the current user and return new token with company context.
     """
     return service.select_company(db, company_id, current_user)
+
+
+@company_router.get("/me", response_model=CompanyMeDetail)
+async def get_company_me(
+    db: db_dependency,
+    current_user: user_dependency
+):
+    """
+    Obtener información completa de la empresa del usuario actual.
+    
+    **Incluye:**
+    - Información completa de la empresa
+    - URL segura temporal para el logo (24h de validez)
+    - Lista de todos los PDVs con información de ubicación
+    - Departamentos y ciudades asociados a cada PDV
+    - Rol del usuario en la empresa
+    
+    **Seguridad:**
+    - URL del logo generada con presigned URL temporal
+    - Solo información de la empresa a la que pertenece el usuario
+    """
+    return service.get_company_me_detail(db, current_user)
 
 
 @company_router.patch("/me", response_model=CompanyOut)

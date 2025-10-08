@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.modules.company.schemas import CompanyCreate, CompanyOutWithRole, AssignUserToCompany
 from app.modules.auth.utils import create_access_token
 from app.dependencies.dbDependecies import db_dependency
@@ -423,5 +423,134 @@ def get_company_logo_url(db, current_user):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener logo: {str(e)}"
+        )
+
+
+def get_company_me_detail(db: Session, current_user: User) -> dict:
+    """
+    Obtener información completa de la empresa del usuario actual.
+    Incluye PDVs con información de ubicación y URL segura para el logo.
+    
+    Args:
+        db (Session): Sesión de base de datos
+        current_user (User): Usuario actual autenticado
+        
+    Returns:
+        dict: Información completa de la empresa con PDVs y ubicaciones
+    """
+    from app.modules.files.service import get_presigned_download_url
+    
+    try:
+        # Obtener la empresa actual del usuario con la relación UserCompany
+        user_company = db.query(UserCompany).filter(
+            UserCompany.user_id == current_user.id,
+            UserCompany.is_active == True
+        ).first()
+        
+        if not user_company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no pertenece a ninguna empresa activa"
+            )
+        
+        # Obtener la empresa con todos los PDVs y sus ubicaciones
+        company = db.query(Company).filter(
+            Company.id == user_company.company_id
+        ).first()
+        
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Empresa no encontrada"
+            )
+        
+        # Obtener PDVs con ubicaciones usando joins explícitos
+        from app.modules.pdv.models import PDV
+        from app.modules.locations.models import Department, City
+        
+        pdvs_query = db.query(PDV).options(
+            joinedload(PDV.department),
+            joinedload(PDV.city)
+        ).filter(
+            PDV.tenant_id == company.id
+        ).all()
+        
+        # Generar URL segura para el logo si existe
+        logo_url = None
+        if company.logo:
+            try:
+                logo_url = get_presigned_download_url(
+                    bucket_name="ally360",
+                    object_key=company.logo,
+                    expires_in_hours=24  # URL válida por 24 horas
+                )
+            except Exception as e:
+                # Si falla la generación de URL, continúa sin logo_url
+                print(f"Warning: No se pudo generar URL para logo: {e}")
+        
+        # Preparar datos de PDVs con ubicaciones
+        pdvs_data = []
+        for pdv in pdvs_query:
+            pdv_data = {
+                "id": pdv.id,
+                "name": pdv.name,
+                "address": pdv.address,
+                "phone_number": pdv.phone_number,
+                "is_main": pdv.is_main,
+                "is_active": pdv.is_active,
+                "created_at": pdv.created_at,
+                "updated_at": pdv.updated_at,
+                "department_id": pdv.department_id,
+                "city_id": pdv.city_id,
+                "department": None,
+                "city": None
+            }
+            
+            # Agregar información del departamento si existe
+            if pdv.department:
+                pdv_data["department"] = {
+                    "id": pdv.department.id,
+                    "name": pdv.department.name,
+                    "code": pdv.department.code
+                }
+            
+            # Agregar información de la ciudad si existe
+            if pdv.city:
+                pdv_data["city"] = {
+                    "id": pdv.city.id,
+                    "name": pdv.city.name,
+                    "code": pdv.city.code,
+                    "department_id": pdv.city.department_id
+                }
+            
+            pdvs_data.append(pdv_data)
+        
+        # Preparar respuesta completa
+        company_detail = {
+            "id": company.id,
+            "name": company.name,
+            "description": company.description,
+            "address": company.address,
+            "phone_number": company.phone_number,
+            "nit": company.nit,
+            "economic_activity": company.economic_activity,
+            "quantity_employees": company.quantity_employees,
+            "social_reason": company.social_reason,
+            "logo": company.logo,  # Clave interna del archivo
+            "logo_url": logo_url,  # URL segura temporal
+            "is_active": company.is_active,
+            "created_at": company.created_at,
+            "user_role": user_company.role,
+            "pdvs": pdvs_data
+        }
+        
+        return company_detail
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener información de la empresa: {str(e)}"
         )
 

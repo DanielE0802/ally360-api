@@ -2,6 +2,7 @@
 API Router for subscription management.
 """
 from typing import List, Optional
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
@@ -18,6 +19,21 @@ router = APIRouter(
     tags=["Subscriptions"],
     responses={404: {"description": "Not found"}}
 )
+
+
+# ===== HELPER FUNCTIONS =====
+
+def create_subscription_detail(subscription, is_active: bool, is_trial: bool, days_remaining: int) -> schemas.SubscriptionDetail:
+    """
+    Helper function to create SubscriptionDetail schema avoiding field conflicts.
+    """
+    return schemas.SubscriptionDetail(
+        **{k: v for k, v in subscription.__dict__.items() if k != "plan"},
+        plan=subscription.plan,
+        is_active=is_active,
+        is_trial=is_trial,
+        days_remaining=days_remaining
+    )
 
 
 # ===== PLAN ENDPOINTS =====
@@ -94,8 +110,7 @@ async def get_current_subscription(
         )
     
     # Calcular propiedades dinámicas
-    from datetime import datetime
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     is_trial = (
         subscription.trial_end_date and 
@@ -159,8 +174,7 @@ async def get_subscriptions(
     )
     
     # Calcular propiedades dinámicas para cada suscripción
-    from datetime import datetime
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     subscription_list = []
     for sub in subscriptions:
@@ -224,8 +238,7 @@ async def get_subscription(
         )
     
     # Calcular propiedades dinámicas
-    from datetime import datetime
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     is_trial = (
         subscription.trial_end_date and 
@@ -247,9 +260,8 @@ async def get_subscription(
     else:
         days_remaining = -1
     
-    subscription_detail = schemas.SubscriptionDetail(
-        **subscription.__dict__,
-        plan=subscription.plan,
+    subscription_detail = create_subscription_detail(
+        subscription=subscription,
         is_active=is_active,
         is_trial=is_trial,
         days_remaining=days_remaining
@@ -285,8 +297,7 @@ async def create_subscription(
         )
         
         # Calcular propiedades dinámicas
-        from datetime import datetime
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         is_trial = (
             subscription.trial_end_date and 
@@ -306,9 +317,8 @@ async def create_subscription(
         else:
             days_remaining = -1
         
-        subscription_detail = schemas.SubscriptionDetail(
-            **subscription.__dict__,
-            plan=subscription.plan,
+        subscription_detail = create_subscription_detail(
+            subscription=subscription,
             is_active=is_active,
             is_trial=is_trial,
             days_remaining=days_remaining
@@ -354,8 +364,7 @@ async def update_subscription(
             )
         
         # Calcular propiedades dinámicas
-        from datetime import datetime
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         is_trial = (
             subscription.trial_end_date and 
@@ -375,9 +384,8 @@ async def update_subscription(
         else:
             days_remaining = -1
         
-        return schemas.SubscriptionDetail(
-            **subscription.__dict__,
-            plan=subscription.plan,
+        return create_subscription_detail(
+            subscription=subscription,
             is_active=is_active,
             is_trial=is_trial,
             days_remaining=days_remaining
@@ -415,8 +423,7 @@ async def cancel_subscription(
         )
     
     # Calcular propiedades dinámicas
-    from datetime import datetime
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     is_trial = (
         subscription.trial_end_date and 
@@ -436,9 +443,8 @@ async def cancel_subscription(
     else:
         days_remaining = -1
     
-    return schemas.SubscriptionDetail(
-        **subscription.__dict__,
-        plan=subscription.plan,
+    return create_subscription_detail(
+        subscription=subscription,
         is_active=is_active,
         is_trial=is_trial,
         days_remaining=days_remaining
@@ -467,8 +473,7 @@ async def reactivate_subscription(
         )
     
     # Calcular propiedades dinámicas
-    from datetime import datetime
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     is_trial = (
         subscription.trial_end_date and 
@@ -488,9 +493,8 @@ async def reactivate_subscription(
     else:
         days_remaining = -1
     
-    return schemas.SubscriptionDetail(
-        **subscription.__dict__,
-        plan=subscription.plan,
+    return create_subscription_detail(
+        subscription=subscription,
         is_active=is_active,
         is_trial=is_trial,
         days_remaining=days_remaining

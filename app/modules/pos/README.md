@@ -1,396 +1,561 @@
-# 🏪 POS Module - Ally360 ERP SaaS
+# 🛒 Módulo POS (Point of Sale) - Ally360
 
-> **Sistema completo de Punto de Venta** con gestión de cajas, vendedores y ventas integradas con inventario y pagos.
-
----
-
-## 🎯 **DESCRIPCIÓN GENERAL**
-
-El módulo **POS (Point of Sale)** proporciona un sistema completo de punto de venta dentro del ERP SaaS **Ally360**. Implementa:
-
-- **🏦 Cajas registradoras**: Apertura/cierre con arqueo automático
-- **💰 Movimientos de caja**: Control completo de efectivo
-- **👥 Vendedores**: Gestión de personal de ventas
-- **🛒 Ventas POS**: Integración completa con inventario y pagos
-- **📊 Control de turnos**: Seguimiento por vendedor y caja
-
-### **Casos de Uso Principales**
-- **Ventas directas**: Proceso completo de venta en punto físico
-- **Control de efectivo**: Arqueo y diferencias de caja
-- **Gestión de vendedores**: Comisiones y performance de ventas
-- **Integración ERP**: Sincronización automática con inventario y contabilidad
+**Sistema completo de Punto de Venta** para el ERP SaaS Ally360, diseñado para **retailers, restaurantes y negocios de servicios** que requieren un POS moderno, escalable y multi-tenant.
 
 ---
 
-## 🏗️ **ARQUITECTURA Y DISEÑO**
+## 📋 Tabla de Contenidos
 
-### **🔧 Patrón Service Layer**
-```
-[Router Layer] → [Service Layer] → [Models Layer] → [Database]
-     ↓               ↓                ↓               ↓
-- Endpoints     - Lógica de      - SQLAlchemy    - PostgreSQL
-- Validación      negocio         models          tablas
-- Auth/RBAC     - Transacciones  - Relationships - Índices
-- HTTP codes    - Integración    - Properties    - Constraints
-```
+1. [🎯 Características Principales](#-características-principales)
+2. [🚀 Características Avanzadas v1.2.0](#-características-avanzadas-v120)
+3. [🏗️ Arquitectura](#️-arquitectura)
+4. [📊 Modelos de Datos](#-modelos-de-datos)
+5. [🔧 Servicios](#-servicios)
+6. [🌐 API Endpoints](#-api-endpoints)
+7. [💼 Casos de Uso](#-casos-de-uso)
+8. [🛡️ Seguridad](#️-seguridad)
+9. [📈 Performance](#-performance)
+10. [🔮 Roadmap](#-roadmap)
 
-### **🎭 Service Classes Architecture**
+---
+
+## 🎯 Características Principales
+
+### 🏪 Gestión de Cajas Registradoras
+- **Caja única por PDV** con validaciones estrictas
+- **Apertura con saldo inicial** configurable
+- **Cierre automático** con arqueo y cálculo de diferencias
+- **Auditoría completa** de usuarios y horarios
+- **Generación automática de nombres** con fecha
+
+### 💰 Movimientos de Caja
+- **5 tipos de movimientos**: Venta, Depósito, Retiro, Gasto, Ajuste
+- **Cálculo en tiempo real** del saldo de caja
+- **Integración automática** con ventas POS
+- **Manejo de vuelto** y sobrepagos
+- **Referencias cruzadas** con facturas
+
+### 👥 Gestión de Vendedores
+- **CRUD completo** con soft delete
+- **Sistema de comisiones** personalizable
+- **Validaciones únicas** por tenant
+- **Información de contacto** completa
+- **Salario base** configurable
+
+### 🛍️ Proceso de Ventas
+- **Flujo completo integrado** con Inventory, Invoices y Payments
+- **Múltiples productos** por venta
+- **Múltiples métodos de pago** por transacción
+- **Actualización automática** de inventario
+- **Generación automática** de documentos fiscales
+
+---
+
+## 🚀 Características Avanzadas v1.2.0
+
+### 📊 Reportes Avanzados POS
+
+#### 1. 👨‍💼 Ventas por Vendedor
 ```python
-# Gestión de cajas registradoras
-class CashRegisterService:
-    def open_cash_register() -> CashRegister
-    def close_cash_register() -> CashRegister
-    def get_cash_registers() -> List[CashRegister]
-
-# Movimientos de efectivo
-class CashMovementService:
-    def create_movement() -> CashMovement
-    def get_movements() -> List[CashMovement]
-
-# Gestión de vendedores
-class SellerService:
-    def create_seller() -> Seller
-    def update_seller() -> Seller
-    def get_sellers() -> List[Seller]
-
-# Ventas POS integradas
-class POSInvoiceService:
-    def create_pos_sale() -> Invoice
-    def get_pos_sales() -> List[Invoice]
+# Análisis completo de performance individual
+{
+    "seller_name": "Juan Pérez",
+    "total_sales": 45,
+    "total_amount": 2847500.00,
+    "average_ticket": 63277.78,
+    "commission_estimated": 142375.00,
+    "active_days": 12,
+    "market_share": 15.8,
+    "ranking": 2,
+    "consistency_score": 8.5,
+    "trend": "upward"
+}
 ```
 
-### **⚡ Integración con Módulos Existentes**
+**Métricas incluidas:**
+- 📈 Total de ventas y montos
+- 💰 Comisiones estimadas
+- 🎯 Ticket promedio y participación
+- 📅 Días activos y consistencia
+- 🏆 Ranking y tendencias
+
+#### 2. 🔍 Arqueos Detallados
 ```python
-# Invoices: Extensión con type=POS
-Invoice.type = Enum["SALE", "POS"]
-Invoice.seller_id = FK(sellers.id)
-
-# Inventory: Descuento automático
-stock.quantity -= sale_item.quantity
-InventoryMovement(type="OUT", reference="POS-001")
-
-# Payments: Pagos obligatorios
-Payment(invoice_id, amount, method="CASH")
-CashMovement(type="SALE", amount, cash_register_id)
+# Análisis histórico de precisión en arqueos
+{
+    "total_cash_registers": 25,
+    "exact_count": 18,
+    "overages_count": 4,
+    "shortages_count": 3,
+    "average_difference": -245.67,
+    "accuracy_percentage": 72.0,
+    "trend_analysis": "improving",
+    "recommendations": ["Implementar conteo doble en cierres"]
+}
 ```
+
+**Análisis incluido:**
+- ✅ Precisión y tendencias históricas
+- 💸 Sobrantes vs faltantes
+- 📊 Recomendaciones automáticas
+- 🎯 KPIs de precisión
+
+#### 3. ⏰ Análisis de Turnos
+```python
+# Comparación de performance por horarios
+{
+    "morning_shift": {  # 6:00 - 14:00
+        "sales_count": 25,
+        "total_amount": 1250000.00,
+        "active_sellers": 3,
+        "average_ticket": 50000.00
+    },
+    "afternoon_shift": {  # 14:00 - 22:00
+        "sales_count": 42,
+        "total_amount": 2100000.00,
+        "active_sellers": 5,
+        "average_ticket": 50000.00
+    },
+    "night_shift": {  # 22:00 - 6:00
+        "sales_count": 8,
+        "total_amount": 320000.00,
+        "active_sellers": 1,
+        "average_ticket": 40000.00
+    }
+}
+```
+
+**Insights automáticos:**
+- 🌅 Comparación mañana vs tarde vs noche
+- 👥 Vendedores activos por turno
+- 💡 Recomendaciones de optimización
+- 📈 Tendencias horarias
+
+#### 4. 🏆 Top Productos POS
+```python
+# Ranking de productos más vendidos
+{
+    "product_name": "Coca Cola 600ml",
+    "total_quantity": 145,
+    "total_revenue": 435000.00,
+    "sales_count": 89,
+    "market_share": 12.5,
+    "ranking": 1,
+    "hhi_contribution": 156.25,
+    "consistency_days": 15
+}
+```
+
+**Análisis incluido:**
+- 🎯 Ranking por cantidad y revenue
+- 📊 Índice de concentración (HHI)
+- 🔄 Productos más consistentes
+- 💹 Participación en ventas totales
+
+### 💳 Métodos de Pago Avanzados
+
+#### 1. 🔄 Pagos Mixtos
+**Combinación de múltiples métodos** en una sola transacción:
+
+```python
+# Ejemplo: Pago de $100,000 dividido
+{
+    "invoice_id": "inv_123",
+    "total_amount": 100000.00,
+    "payments": [
+        {
+            "method": "cash",
+            "amount": 50000.00,
+            "reference": "Efectivo"
+        },
+        {
+            "method": "card",
+            "amount": 30000.00,
+            "reference": "Visa ****1234"
+        },
+        {
+            "method": "qr_code",
+            "amount": 20000.00,
+            "reference": "Nequi QR"
+        }
+    ],
+    "change": 0.00
+}
+```
+
+**Características:**
+- ✅ **Validación automática** de montos totales
+- 💸 **Cálculo de vuelto** inteligente
+- 🏦 **Integración con caja** automática
+- 📝 **Registro independiente** por método
+
+#### 2. 📱 Códigos QR (Billeteras Digitales)
+**Soporte completo para billeteras colombianas:**
+
+```python
+# Generación de QR para Nequi
+{
+    "qr_id": "qr_unique_123",
+    "provider": "nequi",
+    "amount": 25000.00,
+    "qr_data": "nequi://pay?amount=25000&ref=POS_12345",
+    "instructions": "Abra Nequi > Pagar con QR > Escanee el código",
+    "expires_at": "2025-01-08T10:30:00Z",
+    "status": "pending"
+}
+```
+
+**Proveedores soportados:**
+- 🟣 **Nequi**: Bancolombia
+- 🔵 **DaviPlata**: Davivienda  
+- 🟡 **Bancolombia QR**: Tarjetas y cuentas
+- 🏛️ **PSE**: Pagos Seguros en Línea
+
+**Flujo completo:**
+1. 📱 **Generación**: QR único con expiración
+2. 👀 **Verificación**: Estado en tiempo real
+3. ✅ **Confirmación**: Integración automática
+4. 💾 **Registro**: Trazabilidad completa
 
 ---
 
-## 📊 **MODELO DE DATOS**
+## 🏗️ Arquitectura
 
-### **🏦 Tabla: `cash_registers`**
-```sql
-CREATE TABLE cash_registers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL,                    -- Multi-tenant isolation
-    pdv_id UUID NOT NULL REFERENCES pdvs(id),   -- PDV asociado
-    name VARCHAR(100) NOT NULL,                  -- Nombre de la caja
-    status VARCHAR(20) NOT NULL DEFAULT 'closed', -- open/closed
-    opening_balance DECIMAL(15,2) NOT NULL DEFAULT 0,
-    closing_balance DECIMAL(15,2),               -- Solo al cerrar
-    opened_by UUID NOT NULL REFERENCES users(id),
-    closed_by UUID REFERENCES users(id),
-    opened_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    closed_at TIMESTAMP,
-    opening_notes TEXT,
-    closing_notes TEXT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+### 📁 Estructura de Archivos
+```
+app/modules/pos/
+├── 📄 __init__.py          # Configuración del módulo
+├── 📄 models.py            # Modelos SQLAlchemy
+├── 📄 schemas.py           # Validaciones Pydantic
+├── 📄 crud.py              # Operaciones de base de datos
+├── 📄 service.py           # Lógica de negocio principal
+├── 📄 reports.py           # 🆕 Servicios de reportes avanzados
+├── 📄 payments.py          # 🆕 Servicios de pagos avanzados
+├── 📄 router.py            # Endpoints API principales
+├── 📄 dependencies.py      # Inyección de dependencias
+├── 📄 exceptions.py        # Excepciones personalizadas
+├── 📄 CHANGELOG.md         # Historial de cambios
+└── 📄 README.md            # Esta documentación
+```
+
+### 🔄 Flujo de Datos
+
+```mermaid
+graph TD
+    A[Cliente/Frontend] --> B[Router]
+    B --> C[Service Layer]
+    C --> D[CRUD Layer]
+    D --> E[SQLAlchemy Models]
+    E --> F[PostgreSQL]
     
-    -- Constraints
-    CONSTRAINT uq_cash_register_tenant_pdv_name UNIQUE (tenant_id, pdv_id, name)
-);
-```
-
-### **💰 Tabla: `cash_movements`**
-```sql
-CREATE TABLE cash_movements (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL,                    -- Multi-tenant isolation
-    cash_register_id UUID NOT NULL REFERENCES cash_registers(id),
-    type VARCHAR(20) NOT NULL,                   -- sale/deposit/withdrawal/expense/adjustment
-    amount DECIMAL(15,2) NOT NULL,               -- Siempre valor absoluto
-    reference VARCHAR(100),                      -- Referencia opcional
-    notes TEXT,                                  -- Notas del movimiento
-    invoice_id UUID REFERENCES invoices(id),     -- Solo para type=SALE
-    created_by UUID NOT NULL REFERENCES users(id),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-### **👥 Tabla: `sellers`**
-```sql
-CREATE TABLE sellers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL,                    -- Multi-tenant isolation
-    name VARCHAR(200) NOT NULL,                  -- Nombre completo
-    email VARCHAR(100),                          -- Email único
-    phone VARCHAR(50),                           -- Teléfono
-    document VARCHAR(50),                        -- Documento único
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    commission_rate DECIMAL(5,4),                -- Tasa de comisión (0.05 = 5%)
-    base_salary DECIMAL(15,2),                   -- Salario base
-    notes TEXT,                                  -- Notas adicionales
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    deleted_at TIMESTAMP,                        -- Soft delete
+    C --> G[Inventory Module]
+    C --> H[Invoices Module]
+    C --> I[Payments Module]
     
-    -- Constraints
-    CONSTRAINT uq_seller_tenant_email UNIQUE (tenant_id, email),
-    CONSTRAINT uq_seller_tenant_document UNIQUE (tenant_id, document)
-);
+    C --> J[🆕 Reports Service]
+    C --> K[🆕 Advanced Payments]
 ```
 
-### **🧾 Extensión de `invoices`**
-```sql
--- Agregar campos POS a tabla existente
-ALTER TABLE invoices 
-ADD COLUMN seller_id UUID REFERENCES sellers(id);
+### 🧩 Principios de Diseño
 
--- Modificar enum type
-ALTER TYPE invoicetype ADD VALUE 'pos';
-```
+1. **🎯 Separación de responsabilidades**
+   - **Router**: Solo endpoints y validación HTTP
+   - **Service**: Lógica de negocio y orquestación
+   - **CRUD**: Acceso a datos optimizado
+   - **Models**: Estructura y relaciones
 
-### **🔍 Índices Optimizados**
-```sql
--- Performance indexes para POS
-CREATE INDEX idx_cash_registers_tenant_pdv_status ON cash_registers(tenant_id, pdv_id, status);
-CREATE INDEX idx_cash_movements_register_type ON cash_movements(cash_register_id, type);
-CREATE INDEX idx_cash_movements_created_at ON cash_movements(tenant_id, created_at DESC);
-CREATE INDEX idx_sellers_tenant_active ON sellers(tenant_id, is_active) WHERE deleted_at IS NULL;
-CREATE INDEX idx_invoices_pos_seller ON invoices(tenant_id, seller_id) WHERE type = 'pos';
-```
+2. **🔒 Multi-tenancy estricto**
+   - Filtrado automático por `tenant_id`
+   - Validación de pertenencia en cada operación
+   - Aislamiento completo entre tenants
+
+3. **⚡ Performance first**
+   - Queries optimizadas con índices estratégicos
+   - Cálculos en SQL vs loops en memoria
+   - Lazy loading y propiedades calculadas
+
+4. **🛡️ Seguridad por diseño**
+   - Validación estricta de permisos
+   - Límites configurables por tenant
+   - Auditoría completa de operaciones
 
 ---
 
-## 📝 **ESQUEMAS PYDANTIC**
+## 📊 Modelos de Datos
 
-### **🏦 CashRegister Schemas**
+### 🏪 CashRegister (Caja Registradora)
 ```python
-class CashRegisterOpen(BaseModel):
-    opening_balance: Decimal = Field(ge=0, description="Saldo inicial")
-    opening_notes: Optional[str] = Field(None, max_length=500)
-
-class CashRegisterClose(BaseModel):
-    closing_balance: Decimal = Field(ge=0, description="Saldo final declarado")
-    closing_notes: Optional[str] = Field(None, max_length=500)
-
-class CashRegisterOut(BaseModel):
-    id: UUID
-    pdv_id: UUID
-    name: str
-    status: CashRegisterStatus
-    opening_balance: Decimal
-    closing_balance: Optional[Decimal]
-    opened_by: UUID
-    closed_by: Optional[UUID]
-    opened_at: datetime
-    closed_at: Optional[datetime]
+class CashRegister(Base, TenantMixin):
+    __tablename__ = "cash_registers"
+    
+    id: UUID              # Identificador único
+    tenant_id: UUID       # Multi-tenancy
+    location_id: UUID     # PDV/Sucursal
+    name: str             # "Caja Principal - 20250108"
+    opening_balance: Decimal   # Saldo inicial
+    closing_balance: Decimal   # Saldo final (nullable)
+    status: CashRegisterStatus # open/closed
+    opened_by: UUID       # Usuario apertura
+    closed_by: UUID       # Usuario cierre (nullable)
+    opened_at: datetime   # Timestamp apertura
+    closed_at: datetime   # Timestamp cierre (nullable)
+    opening_notes: str    # Notas apertura (nullable)
+    closing_notes: str    # Notas cierre (nullable)
+    
+    # Relaciones
+    movements: List[CashMovement]
+    
     # Propiedades calculadas
-    calculated_balance: Decimal
-    difference: Optional[Decimal]
+    @property
+    def current_balance(self) -> Decimal:
+        """Saldo actual calculado en tiempo real"""
+        
+    @property
+    def total_sales(self) -> Decimal:
+        """Total de ventas del período"""
+        
+    @property
+    def cash_difference(self) -> Decimal:
+        """Diferencia en arqueo (real vs teórico)"""
 ```
 
-### **💰 CashMovement Schemas**
+### 💰 CashMovement (Movimiento de Caja)
 ```python
-class CashMovementCreate(BaseModel):
-    cash_register_id: UUID
-    type: MovementType = Field(description="sale/deposit/withdrawal/expense/adjustment")
-    amount: Decimal = Field(gt=0, description="Monto (siempre positivo)")
-    reference: Optional[str] = Field(None, max_length=100)
-    notes: Optional[str] = Field(None, max_length=500)
-
-class CashMovementOut(BaseModel):
-    id: UUID
-    cash_register_id: UUID
-    type: MovementType
-    amount: Decimal
-    signed_amount: Decimal  # Con signo según tipo
-    reference: Optional[str]
-    notes: Optional[str]
-    invoice_id: Optional[UUID]
-    created_by: UUID
-    created_at: datetime
-```
-
-### **👥 Seller Schemas**
-```python
-class SellerCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    email: Optional[str] = Field(None, max_length=100)
-    phone: Optional[str] = Field(None, max_length=50)
-    document: Optional[str] = Field(None, max_length=50)
-    commission_rate: Optional[Decimal] = Field(None, ge=0, le=1)
-    base_salary: Optional[Decimal] = Field(None, ge=0)
-    notes: Optional[str] = Field(None, max_length=500)
-
-class SellerOut(BaseModel):
-    id: UUID
-    name: str
-    email: Optional[str]
-    phone: Optional[str]
-    document: Optional[str]
-    is_active: bool
-    commission_rate: Optional[Decimal]
-    base_salary: Optional[Decimal]
-    notes: Optional[str]
-    created_at: datetime
-    updated_at: datetime
-```
-
-### **🛒 POS Invoice Schemas**
-```python
-class POSLineItemCreate(BaseModel):
-    product_id: UUID
-    quantity: Decimal = Field(gt=0)
-    unit_price: Optional[Decimal] = Field(None, gt=0)  # Del producto si no se especifica
-
-class POSPaymentCreate(BaseModel):
-    method: PaymentMethod = Field(description="cash/transfer/card/other")
-    amount: Decimal = Field(gt=0)
-    reference: Optional[str] = Field(None, max_length=100)
-    notes: Optional[str] = Field(None, max_length=200)
-
-class POSInvoiceCreate(BaseModel):
-    customer_id: UUID
-    seller_id: UUID
-    items: List[POSLineItemCreate] = Field(min_length=1)
-    payments: List[POSPaymentCreate] = Field(min_length=1)
-    notes: Optional[str] = Field(None, max_length=500)
+class CashMovement(Base, TenantMixin):
+    __tablename__ = "cash_movements"
     
-    @field_validator('payments')
-    def validate_payments_cover_total(cls, v):
-        if not v:
-            raise ValueError('Debe incluir al menos un pago')
-        return v
+    id: UUID                    # Identificador único
+    tenant_id: UUID             # Multi-tenancy
+    cash_register_id: UUID      # Caja asociada
+    type: MovementType          # SALE/DEPOSIT/WITHDRAWAL/EXPENSE/ADJUSTMENT
+    amount: Decimal             # Monto (+ entrada, - salida)
+    description: str            # Descripción del movimiento
+    reference: str              # Referencia externa (opcional)
+    invoice_id: UUID            # Factura asociada (nullable)
+    created_by: UUID            # Usuario que creó
+    created_at: datetime        # Timestamp
+    
+    # Relaciones
+    cash_register: CashRegister
+    invoice: Invoice            # Relación con módulo invoices
+```
+
+### 👥 Seller (Vendedor)
+```python
+class Seller(Base, TenantMixin):
+    __tablename__ = "sellers"
+    
+    id: UUID              # Identificador único
+    tenant_id: UUID       # Multi-tenancy
+    user_id: UUID         # Usuario del sistema (nullable)
+    name: str             # Nombre completo
+    email: str            # Email único por tenant
+    phone: str            # Teléfono (nullable)
+    document_number: str  # Documento único por tenant
+    commission_rate: Decimal  # Tasa de comisión (nullable)
+    base_salary: Decimal      # Salario base (nullable)
+    is_active: bool = True    # Soft delete
+    
+    # Relaciones
+    invoices: List[Invoice]   # Ventas del vendedor
+    
+    # Propiedades calculadas
+    @property
+    def total_sales_count(self) -> int:
+        """Total de ventas realizadas"""
+        
+    @property
+    def total_sales_amount(self) -> Decimal:
+        """Monto total vendido"""
 ```
 
 ---
 
-## 🛣️ **ENDPOINTS API**
+## 🔧 Servicios
 
-### **📋 Resumen de Endpoints**
-| Método | Endpoint | Descripción | Permisos |
-|--------|----------|-------------|----------|
-| `POST` | `/cash-registers/open` | Abrir caja | Owner, Admin, Seller, Cashier |
-| `POST` | `/cash-registers/{id}/close` | Cerrar caja | Owner, Admin, Seller, Cashier |
-| `GET` | `/cash-registers` | Listar cajas | Todos (según rol) |
-| `GET` | `/cash-registers/{id}` | Detalle de caja | Todos (según rol) |
-| `POST` | `/cash-movements` | Crear movimiento | Owner, Admin, Seller, Cashier |
-| `GET` | `/cash-movements` | Listar movimientos | Todos (según rol) |
-| `POST` | `/sellers` | Crear vendedor | Owner, Admin |
-| `GET` | `/sellers` | Listar vendedores | Todos |
-| `PATCH` | `/sellers/{id}` | Actualizar vendedor | Owner, Admin |
-| `DELETE` | `/sellers/{id}` | Desactivar vendedor | Owner, Admin |
-| `POST` | `/pos/sales` | Crear venta POS | Owner, Admin, Seller, Cashier |
-| `GET` | `/pos/sales` | Listar ventas POS | Todos (según rol) |
+### 🏪 POSService (Servicio Principal)
+**Orquesta todo el proceso de venta POS:**
 
-### **🏦 POST `/cash-registers/open` - Abrir Caja**
 ```python
-@router.post("/cash-registers/open", response_model=CashRegisterOut)
-async def open_cash_register(
-    register_data: CashRegisterOpen,
-    auth_context: AuthContext = Depends(get_auth_context),
-    db: Session = Depends(get_db)
-):
-    """
-    Abrir caja registradora en el PDV del contexto JWT.
-    
-    - Valida que no hay otra caja abierta en el PDV
-    - Genera nombre automático por fecha
-    - Registra usuario y hora de apertura
-    - Establece saldo inicial
-    """
+class POSService:
+    async def process_sale(
+        self, 
+        sale_data: POSSaleCreate, 
+        db: AsyncSession,
+        current_user: User,
+        tenant_id: UUID
+    ) -> POSSaleResponse:
+        """
+        Proceso completo de venta POS con validaciones
+        e integraciones automáticas
+        """
 ```
 
-**Ejemplo Request:**
+**Validaciones incluidas:**
+- ✅ Caja abierta obligatoria
+- ✅ Stock suficiente por producto
+- ✅ Vendedor activo y válido
+- ✅ Montos de pago vs total de venta
+- ✅ Permisos del usuario actual
+
+**Integraciones automáticas:**
+- 📦 **Inventory**: Descuento automático de stock
+- 🧾 **Invoices**: Generación de factura fiscal
+- 💳 **Payments**: Registro de pagos por método
+- 💰 **Cash**: Movimientos automáticos de caja
+
+### 📊 POSReportsService (Reportes Avanzados) 🆕
+**Análisis completo de performance POS:**
+
+```python
+class POSReportsService:
+    async def get_sales_by_seller_report(
+        self,
+        date_range: DateRange,
+        seller_id: Optional[UUID],
+        db: AsyncSession,
+        tenant_id: UUID
+    ) -> SalesBySellerResponse:
+        """Reporte detallado de ventas por vendedor"""
+        
+    async def get_cash_audit_report(
+        self,
+        date_range: DateRange,
+        location_id: Optional[UUID],
+        db: AsyncSession,
+        tenant_id: UUID
+    ) -> CashAuditResponse:
+        """Análisis de arqueos y precisión histórica"""
+        
+    async def get_shift_analysis_report(
+        self,
+        date_range: DateRange,
+        location_id: Optional[UUID],
+        db: AsyncSession,
+        tenant_id: UUID
+    ) -> ShiftAnalysisResponse:
+        """Comparación de performance por turnos"""
+        
+    async def get_top_products_report(
+        self,
+        date_range: DateRange,
+        location_id: Optional[UUID],
+        limit: int,
+        db: AsyncSession,
+        tenant_id: UUID
+    ) -> TopProductsResponse:
+        """Ranking de productos más vendidos"""
+```
+
+### 💳 AdvancedPaymentService (Pagos Avanzados) 🆕
+**Procesamiento de métodos de pago complejos:**
+
+```python
+class AdvancedPaymentService:
+    async def process_mixed_payment(
+        self,
+        payment_data: MixedPaymentRequest,
+        db: AsyncSession,
+        current_user: User,
+        tenant_id: UUID
+    ) -> MixedPaymentResponse:
+        """Procesamiento de pagos con múltiples métodos"""
+        
+    async def generate_qr_payment(
+        self,
+        qr_data: QRPaymentRequest,
+        db: AsyncSession,
+        current_user: User,
+        tenant_id: UUID
+    ) -> QRPaymentResponse:
+        """Generación de códigos QR para billeteras"""
+        
+    async def verify_qr_payment_status(
+        self,
+        status_data: QRPaymentStatusRequest,
+        db: AsyncSession,
+        tenant_id: UUID
+    ) -> QRPaymentStatusResponse:
+        """Verificación de estado de pago QR"""
+        
+    async def validate_payment_limits(
+        self,
+        amount: Decimal,
+        method: PaymentMethod,
+        tenant_id: UUID
+    ) -> PaymentValidationResponse:
+        """Validación de límites por método de pago"""
+```
+
+---
+
+## 🌐 API Endpoints
+
+### 🏪 Gestión de Cajas Registradoras
+
+#### `POST /cash-registers/open` - Abrir Caja
 ```json
 {
+    "location_id": "550e8400-e29b-41d4-a716-446655440000",
     "opening_balance": 100000.00,
-    "opening_notes": "Apertura de caja turno mañana"
+    "opening_notes": "Apertura turno mañana"
 }
 ```
 
-**Ejemplo Response (201):**
+#### `POST /cash-registers/{id}/close` - Cerrar Caja
 ```json
 {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "pdv_id": "123e4567-e89b-12d3-a456-426614174001",
-    "name": "Caja Principal - 20250928",
-    "status": "open",
-    "opening_balance": 100000.00,
-    "closing_balance": null,
-    "opened_by": "123e4567-e89b-12d3-a456-426614174002",
-    "closed_by": null,
-    "opened_at": "2025-09-28T08:00:00Z",
-    "closed_at": null,
-    "opening_notes": "Apertura de caja turno mañana",
-    "calculated_balance": 100000.00,
-    "difference": null
+    "closing_balance": 895750.00,
+    "closing_notes": "Arqueo sin diferencias"
 }
 ```
 
-### **💰 POST `/cash-movements` - Registrar Movimiento**
-```python
-@router.post("/cash-movements", response_model=CashMovementOut)
-async def create_cash_movement(
-    movement_data: CashMovementCreate,
-    auth_context: AuthContext = Depends(get_auth_context),
-    db: Session = Depends(get_db)
-):
-    """
-    Registrar movimiento manual de caja.
-    
-    Tipos de movimiento:
-    - DEPOSIT: Ingreso manual de efectivo
-    - WITHDRAWAL: Retiro manual de efectivo
-    - EXPENSE: Gasto pagado desde caja
-    - ADJUSTMENT: Ajuste por diferencias
-    
-    Nota: SALE se genera automáticamente con ventas POS
-    """
-```
+#### `GET /cash-registers/current` - Caja Actual
+Devuelve la caja abierta actual del PDV.
 
-**Ejemplo Request:**
+### 💰 Movimientos de Caja
+
+#### `POST /cash-movements` - Crear Movimiento
 ```json
 {
-    "cash_register_id": "123e4567-e89b-12d3-a456-426614174000",
-    "type": "expense",
-    "amount": 15000.00,
-    "reference": "FACT-001",
-    "notes": "Pago de servicios públicos"
+    "type": "deposit",
+    "amount": 50000.00,
+    "description": "Depósito inicial turno",
+    "reference": "DEP-001"
 }
 ```
 
-### **🛒 POST `/pos/sales` - Crear Venta POS**
-```python
-@router.post("/pos/sales", response_model=POSInvoiceOut)
-async def create_pos_sale(
-    sale_data: POSInvoiceCreate,
-    auth_context: AuthContext = Depends(get_auth_context),
-    db: Session = Depends(get_db)
-):
-    """
-    Crear venta POS completa con proceso automático:
-    
-    1. Valida caja abierta obligatoria
-    2. Crea factura type=POS con seller_id
-    3. Descuenta stock automáticamente
-    4. Registra pagos obligatorios
-    5. Genera movimientos de caja
-    6. Maneja vuelto si aplica
-    """
-```
+#### `GET /cash-movements` - Listar Movimientos
+Con filtros por tipo, fecha y rango de montos.
 
-**Ejemplo Request:**
+### 👥 Gestión de Vendedores
+
+#### `POST /sellers` - Crear Vendedor
 ```json
 {
-    "customer_id": "123e4567-e89b-12d3-a456-426614174003",
-    "seller_id": "123e4567-e89b-12d3-a456-426614174004",
+    "name": "Ana García",
+    "email": "ana.garcia@empresa.com",
+    "phone": "+573001234567",
+    "document_number": "12345678",
+    "commission_rate": 5.0,
+    "base_salary": 1200000.00
+}
+```
+
+#### `GET /sellers` - Listar Vendedores
+Con búsqueda por nombre y filtro de activos.
+
+### 🛍️ Proceso de Ventas
+
+#### `POST /sales` - Procesar Venta
+```json
+{
+    "seller_id": "550e8400-e29b-41d4-a716-446655440000",
+    "customer_name": "Cliente Final",
+    "customer_email": "cliente@email.com",
     "items": [
         {
-            "product_id": "123e4567-e89b-12d3-a456-426614174005",
+            "product_id": "660e8400-e29b-41d4-a716-446655440000",
             "quantity": 2,
             "unit_price": 25000.00
         }
@@ -399,639 +564,562 @@ async def create_pos_sale(
         {
             "method": "cash",
             "amount": 50000.00,
-            "reference": "EFECTIVO",
-            "notes": "Pago en efectivo"
+            "reference": "Efectivo"
         }
     ],
     "notes": "Venta mostrador"
 }
 ```
 
----
+### 📊 Reportes Avanzados 🆕
 
-## 🛡️ **SEGURIDAD Y PERMISOS**
-
-### **🔐 Role-Based Access Control (RBAC)**
-| Operación | Owner | Admin | Seller | Cashier | Accountant | Viewer |
-|-----------|-------|-------|--------|---------|------------|--------|
-| **Abrir/Cerrar caja** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| **Movimientos de caja** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| **Ver cajas/movimientos** | ✅ | ✅ | ✅¹ | ✅¹ | ✅ | ✅ |
-| **Crear/Editar vendedores** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Ver vendedores** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Ventas POS** | ✅ | ✅ | ✅² | ✅² | ❌ | ❌ |
-| **Ver ventas POS** | ✅ | ✅ | ✅² | ✅² | ✅ | ✅ |
-
-**¹** Solo sus propias cajas/movimientos  
-**²** Solo sus propias ventas (seller/cashier)
-
-### **🏢 Multi-Tenant Security**
-```python
-# Automático en cada query
-def get_cash_register_detail(register_id: UUID, tenant_id: UUID):
-    register = db.query(CashRegister).filter(
-        CashRegister.id == register_id,
-        CashRegister.tenant_id == tenant_id  # ← Siempre incluido
-    ).first()
-    
-    if not register:
-        raise HTTPException(404, "Caja registradora no encontrada")
-    
-    return register
+#### `POST /reports/sales-by-seller` - Ventas por Vendedor
+```json
+{
+    "start_date": "2025-01-01",
+    "end_date": "2025-01-31",
+    "seller_id": null  // Opcional, todos los vendedores
+}
 ```
 
-### **✅ Validaciones de Negocio**
-```python
-class CashRegisterService:
-    def open_cash_register(self, pdv_id: UUID, tenant_id: UUID):
-        # Validar que no hay otra caja abierta
-        existing_open = db.query(CashRegister).filter(
-            CashRegister.tenant_id == tenant_id,
-            CashRegister.pdv_id == pdv_id,
-            CashRegister.status == CashRegisterStatus.OPEN
-        ).first()
-        
-        if existing_open:
-            raise HTTPException(409, "Ya existe una caja abierta en este PDV")
-
-class POSInvoiceService:
-    def create_pos_sale(self, sale_data: POSInvoiceCreate, pdv_id: UUID):
-        # Validar caja abierta obligatoria
-        open_register = db.query(CashRegister).filter(
-            CashRegister.pdv_id == pdv_id,
-            CashRegister.status == CashRegisterStatus.OPEN
-        ).first()
-        
-        if not open_register:
-            raise HTTPException(409, "No hay caja abierta. Abra una caja antes de vender.")
-```
-
----
-
-## 📈 **PERFORMANCE Y ESCALABILIDAD**
-
-### **⚡ Optimizaciones de Base de Datos**
-```sql
--- Índices compuestos para queries más comunes
-CREATE INDEX idx_cash_registers_tenant_pdv_status_opened 
-ON cash_registers(tenant_id, pdv_id, status, opened_at DESC) 
-WHERE status = 'open';
-
--- Índice para movimientos por caja
-CREATE INDEX idx_cash_movements_register_created 
-ON cash_movements(cash_register_id, created_at DESC);
-
--- Índice para ventas POS por vendedor
-CREATE INDEX idx_invoices_pos_seller_date 
-ON invoices(tenant_id, seller_id, issue_date DESC) 
-WHERE type = 'pos';
-
--- Índice parcial para vendedores activos
-CREATE INDEX idx_sellers_active_name 
-ON sellers(tenant_id, name) 
-WHERE is_active = true AND deleted_at IS NULL;
-```
-
-### **📄 Paginación Eficiente**
-```python
-def get_cash_movements(self, cash_register_id: UUID, limit: int = 100, offset: int = 0):
-    # Query base optimizada
-    base_query = self.db.query(CashMovement).filter(
-        CashMovement.cash_register_id == cash_register_id
-    )
-    
-    # Count optimizado (sin OFFSET/LIMIT)
-    total = base_query.count()
-    
-    # Datos paginados con ORDER BY optimizado
-    movements = base_query.order_by(
-        desc(CashMovement.created_at)
-    ).offset(offset).limit(limit).all()
-    
-    return {
-        "movements": movements,
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "has_more": (offset + limit) < total
-    }
-```
-
-### **🚀 Optimizaciones de Ventas POS**
-```python
-@property
-def calculated_balance(self) -> Decimal:
-    """Balance calculado con cache en memoria"""
-    if not hasattr(self, '_calculated_balance'):
-        self._calculated_balance = self.opening_balance + sum(
-            movement.signed_amount for movement in self.movements
-        )
-    return self._calculated_balance
-
-# Bulk operations para ventas múltiples
-def create_bulk_pos_sales(self, sales_data: List[POSInvoiceCreate]):
-    """Crear múltiples ventas POS en una transacción"""
-    try:
-        invoices = []
-        for sale_data in sales_data:
-            invoice = self._create_single_pos_sale(sale_data)
-            invoices.append(invoice)
-        
-        self.db.commit()
-        return invoices
-    except Exception:
-        self.db.rollback()  
-        raise
-```
-
----
-
-## 🔗 **INTEGRACIONES ERP**
-
-### **🧾 Integración con Módulo Invoices**
-```python
-# Extensión del modelo Invoice existente
-class Invoice(Base, TenantMixin, TimestampMixin):
-    # Campos existentes...
-    seller_id = Column(UUID, ForeignKey('sellers.id'), nullable=True)
-    
-    # Nueva relationship
-    seller = relationship("Seller")
-
-# Enum extendido
-class InvoiceType(enum.Enum):
-    SALE = "sale"    # Facturas regulares
-    POS = "pos"      # Ventas POS ← NUEVO
-
-# Query para ventas POS
-pos_sales = db.query(Invoice).filter(
-    Invoice.type == InvoiceType.POS,
-    Invoice.tenant_id == tenant_id
-).all()
-```
-
-### **📦 Integración con Módulo Inventory** 
-```python
-# Descuento automático en ventas POS
-def _update_inventory_for_pos_sale(self, invoice: Invoice, items: List[POSLineItem]):
-    for item in items:
-        # 1. Reducir stock
-        stock = self.db.query(Stock).filter(
-            Stock.product_id == item.product_id,
-            Stock.pdv_id == invoice.pdv_id,
-            Stock.tenant_id == invoice.tenant_id
-        ).first()
-        
-        stock.quantity -= item.quantity
-        
-        # 2. Crear movimiento OUT
-        movement = InventoryMovement(
-            tenant_id=invoice.tenant_id,
-            product_id=item.product_id,
-            pdv_id=invoice.pdv_id,
-            quantity=-int(item.quantity),  # Negativo = salida
-            movement_type="OUT",
-            reference=f"POS-{invoice.number}",
-            notes=f"Venta POS - Vendedor: {invoice.seller.name}",
-            created_by=invoice.created_by
-        )
-        self.db.add(movement)
-```
-
-### **💳 Integración con Módulo Payments**
-```python
-# Pagos automáticos en ventas POS
-def _create_pos_payments(self, invoice: Invoice, payments_data: List[POSPaymentCreate]):
-    for payment_data in payments_data:
-        # 1. Crear Payment record
-        payment = Payment(
-            tenant_id=invoice.tenant_id,
-            invoice_id=invoice.id,
-            amount=payment_data.amount,
-            method=payment_data.method,
-            reference=payment_data.reference,
-            payment_date=date.today(),
-            notes=payment_data.notes
-        )
-        self.db.add(payment)
-        
-        # 2. Crear CashMovement si es efectivo
-        if payment_data.method == PaymentMethod.CASH:
-            cash_movement = CashMovement(
-                tenant_id=invoice.tenant_id,
-                cash_register_id=self.open_register.id,
-                type=MovementType.SALE,
-                amount=payment_data.amount,
-                reference=f"POS-{invoice.number}",
-                invoice_id=invoice.id,
-                created_by=invoice.created_by
-            )
-            self.db.add(cash_movement)
-```
-
-### **📊 Integración con Reportes (Futuro)**
-```python
-# Queries optimizadas para reportes POS
-class POSReportQueries:
-    @staticmethod
-    def sales_by_seller(tenant_id: UUID, start_date: date, end_date: date):
-        return db.query(
-            Seller.name,
-            func.count(Invoice.id).label('total_sales'),
-            func.sum(Invoice.total_amount).label('total_amount'),
-            func.avg(Invoice.total_amount).label('avg_ticket')
-        ).join(
-            Invoice, Invoice.seller_id == Seller.id
-        ).filter(
-            Invoice.tenant_id == tenant_id,
-            Invoice.type == InvoiceType.POS,
-            Invoice.issue_date.between(start_date, end_date)
-        ).group_by(Seller.id, Seller.name).all()
-    
-    @staticmethod
-    def cash_register_summary(register_id: UUID):
-        return db.query(
-            CashMovement.type,
-            func.sum(CashMovement.amount).label('total')
-        ).filter(
-            CashMovement.cash_register_id == register_id
-        ).group_by(CashMovement.type).all()
-```
-
----
-
-## 🧪 **TESTING Y CALIDAD**
-
-### **🎯 Test Coverage Strategy**
-```python
-# Test de aislamiento multi-tenant (CRÍTICO)
-async def test_cash_register_tenant_isolation():
-    """Verificar que un tenant no ve cajas de otro"""
-    # Abrir caja en tenant A
-    register_a = await open_cash_register(tenant_id="tenant-a", pdv_id="pdv-1")
-    
-    # Buscar desde tenant B
-    registers_b = await get_cash_registers(tenant_id="tenant-b")
-    
-    # Verificar aislamiento
-    assert register_a.id not in [r.id for r in registers_b.cash_registers]
-    assert len(registers_b.cash_registers) == 0
-
-# Test de validación de caja única por PDV
-async def test_single_open_register_per_pdv():
-    """No permite dos cajas abiertas en el mismo PDV"""
-    # Abrir primera caja
-    register_1 = await open_cash_register(pdv_id="pdv-1", opening_balance=100000)
-    assert register_1.status == "open"
-    
-    # Intentar abrir segunda caja en mismo PDV
-    with pytest.raises(HTTPException) as exc_info:
-        await open_cash_register(pdv_id="pdv-1", opening_balance=50000)
-    
-    assert exc_info.value.status_code == 409
-    assert "ya existe una caja abierta" in exc_info.value.detail.lower()
-
-# Test de venta POS completa
-async def test_complete_pos_sale():
-    """Venta POS completa con todas las integraciones"""
-    # 1. Abrir caja
-    register = await open_cash_register(opening_balance=100000)
-    
-    # 2. Crear venta POS
-    sale = await create_pos_sale({
-        "customer_id": customer_id,
-        "seller_id": seller_id,
-        "items": [{"product_id": product_id, "quantity": 2, "unit_price": 25000}],
-        "payments": [{"method": "cash", "amount": 50000}]
-    })
-    
-    # 3. Verificar factura creada
-    assert sale.type == "pos"
-    assert sale.seller_id == seller_id
-    assert sale.total_amount == 50000
-    
-    # 4. Verificar stock descontado
-    stock = await get_stock(product_id, pdv_id)
-    assert stock.quantity == original_quantity - 2
-    
-    # 5. Verificar movimiento de inventario
-    movements = await get_inventory_movements(product_id)
-    assert movements[-1].movement_type == "OUT"
-    assert movements[-1].quantity == -2
-    
-    # 6. Verificar pago registrado
-    payments = await get_invoice_payments(sale.id)
-    assert len(payments) == 1
-    assert payments[0].amount == 50000
-    
-    # 7. Verificar movimiento de caja
-    cash_movements = await get_cash_movements(register.id)
-    sale_movements = [m for m in cash_movements if m.type == "sale"]
-    assert len(sale_movements) == 1
-    assert sale_movements[0].amount == 50000
-
-# Test de arqueo automático
-async def test_cash_register_closing_with_difference():
-    """Arqueo con diferencia genera ajuste automático"""
-    # Abrir caja con balance inicial
-    register = await open_cash_register(opening_balance=100000)
-    
-    # Registrar algunos movimientos
-    await create_cash_movement(register.id, "deposit", 50000)
-    await create_cash_movement(register.id, "withdrawal", 20000)
-    # Balance calculado: 100000 + 50000 - 20000 = 130000
-    
-    # Cerrar con diferencia (sobrante)
-    closed_register = await close_cash_register(register.id, closing_balance=135000)
-    
-    # Verificar que se creó ajuste
-    movements = await get_cash_movements(register.id)
-    adjustments = [m for m in movements if m.type == "adjustment"]
-    assert len(adjustments) == 1
-    assert adjustments[0].amount == 5000  # Diferencia positiva
-    assert "sobrante" in adjustments[0].notes.lower()
-```
-
-### **🔧 Performance Tests**
-```python
-# Test de concurrencia en ventas POS
-async def test_concurrent_pos_sales():
-    """Manejo de ventas POS concurrentes"""
-    # Abrir caja
-    register = await open_cash_register(opening_balance=100000)
-    
-    # Crear 50 ventas simultáneas
-    async def create_concurrent_sale(sale_number: int):
-        return await create_pos_sale({
-            "customer_id": customer_id,
-            "seller_id": seller_id,
-            "items": [{"product_id": product_id, "quantity": 1}],
-            "payments": [{"method": "cash", "amount": 10000}]
-        })
-    
-    # Ejecutar ventas concurrentes
-    tasks = [create_concurrent_sale(i) for i in range(50)]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    # Verificar que todas se procesaron correctamente
-    successful = [r for r in results if not isinstance(r, Exception)]
-    assert len(successful) == 50
-    
-    # Verificar stock final correcto
-    final_stock = await get_stock(product_id, pdv_id)
-    assert final_stock.quantity == initial_stock - 50
-
-# Test de performance de arqueo con muchos movimientos
-async def test_cash_register_closing_performance():
-    """Arqueo eficiente con muchos movimientos"""
-    # Abrir caja
-    register = await open_cash_register(opening_balance=100000)
-    
-    # Crear 1000 movimientos
-    for i in range(1000):
-        await create_cash_movement(register.id, "sale", 1000)
-    
-    # Medir tiempo de cierre
-    start_time = time.time()
-    closed_register = await close_cash_register(register.id, closing_balance=1100000)
-    end_time = time.time()
-    
-    # Debe cerrar en menos de 2 segundos
-    assert (end_time - start_time) < 2.0
-    assert closed_register.calculated_balance == 1100000
-```
-
----
-
-## 📋 **CASOS DE USO PRINCIPALES**
-
-### **1. Flujo Completo de Venta POS**
-```python
-# 1. Apertura de turno
-cash_register = await open_cash_register({
-    "opening_balance": 100000.00,
-    "opening_notes": "Apertura turno mañana - Vendedor: Juan Pérez"
-})
-
-# 2. Venta POS completa
-pos_sale = await create_pos_sale({
-    "customer_id": "uuid-cliente-generico",
-    "seller_id": "uuid-juan-perez", 
-    "items": [
+**Respuesta detallada:**
+```json
+{
+    "period": {
+        "start_date": "2025-01-01",
+        "end_date": "2025-01-31",
+        "days_count": 31
+    },
+    "sellers": [
         {
-            "product_id": "uuid-producto-1",
-            "quantity": 2,
-            "unit_price": 25000.00
+            "seller_id": "550e8400-e29b-41d4-a716-446655440000",
+            "seller_name": "Juan Pérez",
+            "total_sales": 45,
+            "total_amount": 2847500.00,
+            "average_ticket": 63277.78,
+            "commission_estimated": 142375.00,
+            "active_days": 12,
+            "market_share": 15.8,
+            "ranking": 2,
+            "consistency_score": 8.5,
+            "trend": "upward"
+        }
+    ],
+    "summary": {
+        "total_sellers": 8,
+        "total_sales": 285,
+        "total_amount": 18000000.00,
+        "average_per_seller": 2250000.00
+    }
+}
+```
+
+#### `POST /reports/cash-audit` - Arqueos Detallados
+```json
+{
+    "start_date": "2025-01-01",
+    "end_date": "2025-01-31",
+    "location_id": null  // Opcional, todas las ubicaciones
+}
+```
+
+#### `POST /reports/shift-analysis` - Análisis de Turnos
+```json
+{
+    "start_date": "2025-01-01",
+    "end_date": "2025-01-31",
+    "location_id": null
+}
+```
+
+#### `POST /reports/top-products` - Top Productos
+```json
+{
+    "start_date": "2025-01-01",
+    "end_date": "2025-01-31",
+    "location_id": null,
+    "limit": 20  // Top 20 productos
+}
+```
+
+### 💳 Pagos Avanzados 🆕
+
+#### `POST /payments/mixed` - Pago Mixto
+```json
+{
+    "invoice_id": "770e8400-e29b-41d4-a716-446655440000",
+    "payments": [
+        {
+            "method": "cash",
+            "amount": 50000.00,
+            "reference": "Efectivo cliente"
         },
         {
-            "product_id": "uuid-producto-2", 
-            "quantity": 1,
-            "unit_price": 35000.00
+            "method": "card",
+            "amount": 30000.00,
+            "reference": "Visa ****1234"
+        },
+        {
+            "method": "qr_code",
+            "amount": 20000.00,
+            "reference": "Nequi QR"
+        }
+    ]
+}
+```
+
+#### `POST /payments/qr/generate` - Generar QR
+```json
+{
+    "amount": 25000.00,
+    "provider": "nequi",
+    "reference": "POS_SALE_123",
+    "description": "Pago venta mostrador"
+}
+```
+
+**Respuesta:**
+```json
+{
+    "qr_id": "qr_unique_123",
+    "qr_data": "nequi://pay?amount=25000&ref=POS_12345",
+    "provider": "nequi",
+    "amount": 25000.00,
+    "instructions": "Abra Nequi > Pagar con QR > Escanee el código",
+    "expires_at": "2025-01-08T10:30:00Z",
+    "status": "pending"
+}
+```
+
+#### `POST /payments/qr/status` - Estado QR
+```json
+{
+    "qr_id": "qr_unique_123"
+}
+```
+
+#### `POST /payments/validate` - Validar Límites
+```json
+{
+    "amount": 500000.00,
+    "method": "qr_code"
+}
+```
+
+---
+
+## 💼 Casos de Uso
+
+### 🛍️ Caso 1: Venta Simple Efectivo
+
+**Escenario:** Cliente compra 2 productos, paga en efectivo.
+
+```python
+# 1. Abrir caja (si no está abierta)
+POST /cash-registers/open
+{
+    "location_id": "pdv_001",
+    "opening_balance": 100000.00
+}
+
+# 2. Procesar venta
+POST /sales
+{
+    "seller_id": "seller_001",
+    "customer_name": "Cliente Final",
+    "items": [
+        {
+            "product_id": "prod_001",
+            "quantity": 2,
+            "unit_price": 15000.00
         }
     ],
     "payments": [
         {
             "method": "cash",
-            "amount": 85000.00,
-            "notes": "Pago en efectivo completo"
+            "amount": 35000.00  // Cliente da $35k por $30k
         }
-    ],
-    "notes": "Venta mostrador - Cliente habitual"
-})
-
-# Resultado automático:
-# - Factura creada con type=POS y seller_id
-# - Stock descontado: Producto1 (-2), Producto2 (-1)
-# - Movimientos inventario tipo OUT creados
-# - Pago registrado en payments table
-# - CashMovement tipo SALE creado por $85,000
-# - Invoice status = PAID (pago completo)
-
-# 3. Movimientos adicionales de caja
-expense = await create_cash_movement({
-    "cash_register_id": cash_register.id,
-    "type": "expense",
-    "amount": 15000.00,
-    "reference": "SERVICIO-001",
-    "notes": "Pago servicios públicos"
-})
-
-# 4. Cierre de turno con arqueo
-closed_register = await close_cash_register(cash_register.id, {
-    "closing_balance": 170000.00,
-    "closing_notes": "Cierre turno mañana - Todo conforme"
-})
-
-# Balance calculado: 100000 + 85000 - 15000 = 170000
-# Diferencia: 170000 - 170000 = 0 (sin ajustes)
-```
-
-### **2. Manejo de Vuelto Automático**
-```python
-# Venta con vuelto
-pos_sale_with_change = await create_pos_sale({
-    "customer_id": "uuid-cliente",
-    "seller_id": "uuid-vendedor",
-    "items": [
-        {"product_id": "uuid-producto", "quantity": 1, "unit_price": 47000.00}
-    ],
-    "payments": [
-        {"method": "cash", "amount": 50000.00, "notes": "Pago en efectivo"}
     ]
-})
+}
 
 # Resultado automático:
-# - Invoice total: $47,000
-# - Payment: $50,000 (cash)
-# - CashMovement SALE: +$50,000
-# - CashMovement WITHDRAWAL: -$3,000 (vuelto)
-# - Invoice status = PAID
-# - Balance neto de caja: +$47,000
+# ✅ Factura generada
+# ✅ Stock actualizado (-2 unidades)
+# ✅ Movimiento de caja (+$30k SALE)
+# ✅ Pago registrado ($30k efectivo)
+# ✅ Vuelto calculado ($5k)
 ```
 
-### **3. Gestión de Vendedores con Comisiones**
-```python
-# Crear vendedor con configuración de comisiones
-seller = await create_seller({
-    "name": "María González",
-    "email": "maria.gonzalez@empresa.com",
-    "phone": "+57 300 123 4567",
-    "document": "12345678",
-    "commission_rate": 0.05,  # 5% de comisión
-    "base_salary": 1000000.00,
-    "notes": "Vendedora senior - Especialista en electrónicos"
-})
+### 💳 Caso 2: Venta con Pago Mixto
 
-# Consulta de ventas y comisiones (futuro)
-sales_report = await get_seller_sales_report(seller.id, "2025-09-01", "2025-09-30")
-# Resultado:
-# {
-#     "seller": seller_info,  
-#     "total_sales": 15,
-#     "total_amount": 2500000.00,
-#     "estimated_commission": 125000.00,  # 5% de 2,500,000
-#     "avg_ticket": 166666.67,
-#     "best_sale_day": "2025-09-15"
-# }
+**Escenario:** Cliente compra por $100k, paga $50k efectivo + $50k tarjeta.
+
+```python
+# Procesar pago mixto
+POST /payments/mixed
+{
+    "invoice_id": "inv_123",
+    "payments": [
+        {
+            "method": "cash",
+            "amount": 50000.00,
+            "reference": "Efectivo"
+        },
+        {
+            "method": "card",
+            "amount": 50000.00,
+            "reference": "Visa ****1234"
+        }
+    ]
+}
+
+# Resultado automático:
+# ✅ Validación monto total vs factura
+# ✅ Dos registros de pago independientes
+# ✅ Movimiento de caja solo por efectivo
+# ✅ Cálculo de vuelto si aplica
 ```
 
-### **4. Control de Inventario Integrado**
+### 📱 Caso 3: Pago con QR (Nequi)
+
+**Escenario:** Cliente quiere pagar con Nequi usando QR.
+
 ```python
-# Verificar stock antes de venta
-stock_check = await validate_pos_sale_stock({
-    "items": [
-        {"product_id": "uuid-prod-1", "quantity": 5},
-        {"product_id": "uuid-prod-2", "quantity": 2}
-    ],
-    "pdv_id": pdv_id
-})
+# 1. Generar código QR
+POST /payments/qr/generate
+{
+    "amount": 45000.00,
+    "provider": "nequi",
+    "reference": "POS_SALE_789"
+}
 
-# Si hay stock insuficiente:
-# HTTPException(409, "Stock insuficiente para 'Producto ABC'. Disponible: 3, Solicitado: 5")
+# 2. Mostrar QR al cliente
+# Cliente escanea con app Nequi
 
-# Venta exitosa actualiza automáticamente:
-# 1. Stock table: quantities reducidas por PDV
-# 2. InventoryMovement records: tipo OUT con referencia POS
-# 3. Kardex automático: saldo acumulado actualizado
+# 3. Verificar estado (polling cada 3s)
+POST /payments/qr/status
+{
+    "qr_id": "qr_unique_789"
+}
+
+# Estados posibles:
+# - "pending": Esperando pago
+# - "processing": En proceso
+# - "completed": Pagado exitosamente
+# - "failed": Falló el pago
+# - "expired": QR expirado
+```
+
+### 📊 Caso 4: Reporte de Vendedores
+
+**Escenario:** Gerente quiere ver performance del mes.
+
+```python
+# Generar reporte mensual
+POST /reports/sales-by-seller
+{
+    "start_date": "2025-01-01",
+    "end_date": "2025-01-31"
+}
+
+# Análisis automático incluye:
+# 📈 Ranking de vendedores
+# 💰 Comisiones estimadas
+# 🎯 Metas vs realizado
+# 📊 Tendencias y consistencia
+# 💡 Recomendaciones automáticas
+```
+
+### 🔍 Caso 5: Arqueo de Caja
+
+**Escenario:** Final del día, cerrar y auditar caja.
+
+```python
+# 1. Contar dinero físico en caja
+# 2. Cerrar caja con balance real
+POST /cash-registers/{id}/close
+{
+    "closing_balance": 895750.00,
+    "closing_notes": "Arqueo con faltante $4,250"
+}
+
+# 3. Ver reporte de auditoría
+POST /reports/cash-audit
+{
+    "start_date": "2025-01-08",
+    "end_date": "2025-01-08"
+}
+
+# Resultado automático:
+# ✅ Cálculo diferencia vs teórico
+# ✅ Movimiento de ajuste automático
+# ✅ Análisis de tendencias
+# ✅ Recomendaciones de mejora
 ```
 
 ---
 
-## 🚀 **ROADMAP Y FUTURAS MEJORAS**
+## 🛡️ Seguridad
 
-### **📅 Version 1.1.0 - Q4 2025**
+### 🔐 Control de Acceso (RBAC)
 
-#### **📊 Reportes Avanzados POS**
-- **Ventas por vendedor**: Performance individual con comisiones
-- **Arqueos detallados**: Diferencias históricas y tendencias
-- **Análisis de turnos**: Comparación mañana vs tarde vs noche
-- **Top productos POS**: Más vendidos en punto de venta
+#### Roles y Permisos
+| Acción | Owner | Admin | Seller | Cashier | Accountant |
+|--------|-------|-------|---------|---------|------------|
+| Abrir/Cerrar Caja | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Procesar Ventas | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Ver Reportes | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Gestionar Vendedores | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Movimientos Caja | ✅ | ✅ | ✅* | ✅* | ❌ |
+| Arqueos Históricos | ✅ | ✅ | ❌ | ❌ | ✅ |
 
-#### **💳 Métodos de Pago Avanzados**
-- **Pagos mixtos**: Efectivo + tarjeta en una venta
-- **Integración TPV**: Conexión con terminales bancarias
-- **Pagos diferidos**: Apartados y pagos a plazos
-- **Códigos QR**: Pagos con billeteras digitales
+*Solo movimientos propios y de su caja
 
-#### **📱 Interfaz Móvil POS**
-- **App móvil**: Ventas desde tablet/smartphone
-- **Modo offline**: Sincronización diferida
-- **Lector códigos**: Escaneo de productos
-- **Impresión remota**: Tickets vía WiFi/Bluetooth
+### 🚨 Validaciones de Seguridad
 
-### **📅 Version 1.2.0 - Q1 2026**
+#### Multi-tenancy Estricto
+```python
+# Todas las queries incluyen tenant_id automáticamente
+WHERE cr.tenant_id = :tenant_id 
+    AND cr.location_id IN (user_allowed_locations)
+```
 
-#### **🏪 Multi-Caja por PDV**
-- **Múltiples cajas**: Varias abiertas simultáneamente
-- **Turnos solapados**: Cambios de turno sin cerrar
-- **Consolidación**: Arqueo conjunto de múltiples cajas
-- **Load balancing**: Distribución automática de ventas
+#### Límites Configurables
+```python
+class PaymentLimits:
+    CASH_MAX_DAILY = 5_000_000      # $5M diarios efectivo
+    QR_MAX_TRANSACTION = 2_000_000   # $2M por QR
+    CARD_MIN_AMOUNT = 10_000         # Mín $10k tarjeta
+    
+    # Por tenant y personalizables
+```
 
-#### **🎯 CRM Integrado**
-- **Clientes frecuentes**: Identificación automática
-- **Programas de puntos**: Acumulación y redención  
-- **Promociones POS**: Descuentos automáticos
-- **Historial de compras**: Recomendaciones inteligentes
+#### Detección de Patrones Sospechosos
+- 🚨 **Ventas inusuales**: Montos muy altos para el perfil
+- 🔍 **Arqueos sistemáticos**: Diferencias recurrentes
+- ⏰ **Horarios extraños**: Ventas fuera de horario
+- 💰 **Movimientos de caja**: Retiros frecuentes/grandes
 
-#### **📈 Analytics en Tiempo Real**
-- **Dashboard live**: Ventas del día en tiempo real
-- **Alertas automáticas**: Stock bajo, metas de venta
-- **Comparativas**: Día anterior, semana, mes
-- **Predicciones**: ML para forecast de ventas
+### 🔒 Auditoría Completa
 
-### **📅 Version 1.3.0 - Q2 2026**
+#### Tabla de Auditoría
+```python
+class AuditLog(Base, TenantMixin):
+    action: str           # "POS_SALE", "CASH_OPEN", etc.
+    entity_type: str      # "CashRegister", "Sale"
+    entity_id: UUID       # ID del registro afectado
+    user_id: UUID         # Usuario que ejecutó
+    old_values: JSON      # Estado anterior
+    new_values: JSON      # Estado nuevo
+    ip_address: str       # IP del cliente
+    user_agent: str       # Navegador/app
+    created_at: datetime  # Timestamp
+```
 
-#### **🤖 Inteligencia Artificial**
-- **Detección de fraude**: Patrones sospechosos en ventas
-- **Optimización de turnos**: Mejores horarios por vendedor
-- **Predicción de demanda**: Stock óptimo por PDV
-- **Análisis de comportamiento**: Insights de clientes
+---
 
-#### **🌐 E-commerce Integration**
+## 📈 Performance
+
+### ⚡ Optimizaciones de Queries
+
+#### Índices Estratégicos
+```sql
+-- Para reportes de vendedores
+CREATE INDEX idx_invoices_pos_seller_date_amount 
+ON invoices(tenant_id, seller_id, issue_date, total_amount) 
+WHERE type = 'pos';
+
+-- Para análisis de turnos
+CREATE INDEX idx_invoices_pos_created_hour 
+ON invoices(tenant_id, extract(hour from created_at), issue_date) 
+WHERE type = 'pos';
+
+-- Para top productos
+CREATE INDEX idx_invoice_line_items_product_quantity 
+ON invoice_line_items(product_id, quantity, line_total);
+
+-- Para arqueos
+CREATE INDEX idx_cash_registers_closed_date 
+ON cash_registers(tenant_id, date(closed_at), status) 
+WHERE status = 'closed';
+```
+
+#### Cálculos en SQL vs Python
+```python
+# ❌ Lento: Loop en Python
+total = 0
+for invoice in invoices:
+    total += invoice.total_amount
+
+# ✅ Rápido: Agregación SQL
+total = await db.scalar(
+    select(func.sum(Invoice.total_amount))
+    .where(Invoice.tenant_id == tenant_id)
+)
+```
+
+### 📊 Propiedades Calculadas
+
+#### Cache en Memoria
+```python
+class CashRegister(Base):
+    _current_balance: Optional[Decimal] = None
+    
+    @property
+    def current_balance(self) -> Decimal:
+        """Balance calculado con cache en memoria"""
+        if self._current_balance is None:
+            self._current_balance = self._calculate_balance()
+        return self._current_balance
+```
+
+### 🔄 Paginación Inteligente
+
+#### Keyset Pagination para Grandes Datasets
+```python
+# Para listas grandes (>10k registros)
+async def get_paginated_sales(
+    cursor: Optional[datetime] = None,
+    limit: int = 50
+) -> List[Invoice]:
+    query = select(Invoice).where(Invoice.tenant_id == tenant_id)
+    
+    if cursor:
+        query = query.where(Invoice.created_at > cursor)
+    
+    return await db.execute(
+        query.order_by(Invoice.created_at).limit(limit)
+    )
+```
+
+---
+
+## 🔮 Roadmap
+
+### 🚀 v1.3.0 - Multi-Caja & Analytics (Q1 2026)
+
+#### 🏪 Multi-Caja por PDV
+```python
+# Múltiples cajas abiertas simultáneamente
+class MultiCashSession:
+    primary_register_id: UUID      # Caja principal
+    secondary_registers: List[UUID] # Cajas adicionales
+    shift_manager_id: UUID         # Supervisor del turno
+    
+    # Distribución automática de ventas
+    # Consolidación al cierre
+    # Arqueo conjunto
+```
+
+#### 📈 Analytics en Tiempo Real
+```python
+# Dashboard live con WebSockets
+class LiveAnalytics:
+    current_sales_count: int       # Ventas del día
+    current_revenue: Decimal       # Revenue en tiempo real
+    top_seller_today: str          # Mejor vendedor
+    active_registers: int          # Cajas abiertas
+    
+    # Alertas automáticas
+    # Stock bajo en productos top
+    # Metas de venta próximas
+    # Diferencias en arqueos
+```
+
+### 🌟 v1.4.0 - Mobile & Offline (Q2 2026)
+
+#### 📱 API Móvil Optimizada
+- Endpoints específicos para apps móviles
+- Payload reducido y comprimido
+- Sincronización diferida
+- Modo offline con cola
+
+#### 🔄 Sincronización Offline
+- Base de datos local SQLite
+- Sincronización automática al reconectar
+- Resolución de conflictos inteligente
+- Queue de operaciones pendientes
+
+### 🤖 v2.0.0 - AI & Enterprise (Q3 2026)
+
+#### Inteligencia Artificial
+- **Detección de fraude**: Patrones sospechosos automáticos
+- **Optimización turnos**: ML para mejores horarios
+- **Predicción demanda**: Stock óptimo por PDV
+- **Customer insights**: Análisis comportamiento de clientes
+
+#### Features Empresariales
 - **Omnichannel**: Inventario unificado online/offline
-- **Click & Collect**: Reservas online, retiro en tienda
-- **Devoluciones**: Proceso unificado por canal
-- **Customer journey**: Seguimiento completo
-
-#### **🔒 Seguridad Avanzada**
-- **Autenticación biométrica**: Huella/facial para vendedores
-- **Auditoría forense**: Log completo de operaciones
-- **Cifrado end-to-end**: Protección de datos sensibles
-- **Compliance PCI DSS**: Certificación de seguridad
+- **Seguridad avanzada**: Biometría y auditoría forense
+- **Integración ERP**: Conexión con SAP, Oracle, etc.
+- **Business Intelligence**: Dashboards ejecutivos
 
 ---
 
-## 📞 **SOPORTE Y DOCUMENTACIÓN**
+## 🤝 Contribución
 
-### **🐛 Reportar Issues**
-- **GitHub Issues**: Usar template específico para POS
-- **Bug Report**: Incluir logs de caja y contexto de venta
-- **Feature Request**: Usar roadmap como referencia  
-- **Security Issues**: Canal privado para temas críticos
+### 📋 Checklist para Nuevas Features
 
-### **📚 Documentación Adicional**
-- **API Reference**: Documentación OpenAPI completa
-- **Integration Guide**: Guías de integración con TPV externos
-- **Best Practices**: Patrones recomendados de uso
-- **Troubleshooting**: Soluciones a problemas comunes
+- [ ] **Multi-tenancy**: ¿Filtra por `tenant_id`?
+- [ ] **Validaciones**: ¿Pydantic schemas completos?
+- [ ] **Permisos**: ¿RBAC implementado correctamente?
+- [ ] **Tests**: ¿Unit tests + integration tests?
+- [ ] **Documentación**: ¿README y CHANGELOG actualizados?
+- [ ] **Performance**: ¿Queries optimizadas con índices?
+- [ ] **Seguridad**: ¿Validaciones de límites y auditoría?
 
-### **🎓 Capacitación**
-- **Manual de Usuario**: Guía para cajeros/vendedores
-- **Video Tutoriales**: Procesos paso a paso
-- **Casos de Uso**: Escenarios reales de negocio
-- **Certificación**: Programa de capacitación formal
+### 🧪 Testing Strategy
 
-### **📞 Contacto Técnico**
-- **Slack Channel**: #pos-module
-- **Email Support**: pos-support@ally360.com
-- **Emergency Contact**: +1-xxx-xxx-xxxx (24/7)
-- **Documentation Issues**: docs@ally360.com
+#### Unit Tests
+```python
+# Test aislado de lógica de negocio
+def test_calculate_commission():
+    seller = Seller(commission_rate=5.0)
+    commission = seller.calculate_commission(100000.00)
+    assert commission == 5000.00
+```
+
+#### Integration Tests
+```python
+# Test multi-tenant isolation
+async def test_sales_isolation_between_tenants():
+    # Crear venta en tenant A
+    # Intentar acceder desde tenant B
+    # Debe fallar con 404 o 403
+```
+
+#### Contract Tests
+```python
+# Test de conformidad OpenAPI
+def test_api_schema_compliance():
+    # Validar que responses coinciden con schemas
+    # Validar que todos los endpoints están documentados
+```
 
 ---
 
-**📋 README actualizado:** 28 Septiembre 2025  
-**📦 Versión actual:** 1.0.0 (Development)  
-**🚀 Próxima release:** v1.1.0 (Q4 2025)  
-**👨‍💻 Mantenedor:** Ally360 Development Team  
-**📄 Licencia:** Proprietary - Ally360 SaaS  
-**🌐 Documentación:** [docs.ally360.com/pos](https://docs.ally360.com/pos)
+## 📞 Soporte
+
+### 🐛 Reportar Issues
+- Usar GitHub Issues con template
+- Incluir logs y steps to reproduce
+- Especificar versión y ambiente
+
+### 📚 Documentación Adicional
+- [📋 CHANGELOG.md](./CHANGELOG.md) - Historial detallado
+- [🔧 API Reference](./docs/api.md) - Documentación OpenAPI
+- [🧪 Testing Guide](./docs/testing.md) - Guía de pruebas
+- [🚀 Deployment](./docs/deployment.md) - Guía de despliegue
+
+---
+
+## 📄 Licencia
+
+Este proyecto es propiedad de **Ally360** y está protegido por derechos de autor.
+Uso restringido a desarrollo interno y clientes autorizados.
+
+---
+
+**¡Gracias por usar el módulo POS de Ally360!** 🛒✨
+
+*¿Tienes preguntas o sugerencias? Contacta al equipo de desarrollo.*

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from uuid import UUID
 from datetime import date
+from decimal import Decimal
 
 from app.database.database import get_db
 from app.modules.auth.dependencies import AuthDependencies
@@ -27,6 +28,10 @@ from app.modules.pos.services import (
     CashRegisterService, CashMovementService, 
     SellerService, POSInvoiceService
 )
+from app.modules.pos.reports import POSReportsService, DateRange
+from app.modules.pos.payments import AdvancedPaymentService
+from app.modules.pos.multi_cash import MultiCashService
+from app.modules.pos.analytics import RealTimeAnalyticsService
 from app.modules.pos.schemas import (
     # CashRegister schemas
     CashRegisterOpen, CashRegisterClose, CashRegisterOut, 
@@ -41,8 +46,26 @@ from app.modules.pos.schemas import (
     # POS Invoice schemas
     POSInvoiceCreate, POSInvoiceOut, POSInvoiceDetail,
     
+    # Advanced Payments schemas ← NUEVO
+    MixedPaymentRequest, MixedPaymentResponse,
+    QRPaymentRequest, QRPaymentResponse,
+    QRPaymentStatusRequest, QRPaymentStatusResponse,
+    PaymentValidationResponse,
+    
+    # Multi-Cash schemas ← NUEVO v1.3.0
+    MultiCashSessionCreate, MultiCashSessionResponse, ShiftTransferRequest,
+    ShiftTransferResponse, ConsolidatedAuditResponse, MultiCashSessionClose,
+    
+    # Real-Time Analytics schemas ← NUEVO v1.3.0
+    LiveDashboardResponse, AlertResponse, SalesTargetCheck, PredictiveAnalyticsResponse,
+    LiveMetricsResponse, ComparativeAnalyticsResponse,
+    
     # Enums
-    CashRegisterStatus, MovementType
+    CashRegisterStatus, MovementType, QRPaymentProvider
+)
+from app.modules.pos.reports import (
+    DateRangeSchema, SalesBySellerResponse, CashAuditResponse,
+    ShiftAnalysisResponse, TopProductsResponse
 )
 
 
@@ -470,3 +493,874 @@ async def get_pos_sale_detail(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Endpoint en desarrollo"
     )
+
+
+# ===== REPORTS ROUTER =====
+
+reports_router = APIRouter(prefix="/reports", tags=["POS Reports"])
+
+
+@reports_router.post("/sales-by-seller", response_model=SalesBySellerResponse)
+async def get_sales_by_seller_report(
+    date_range: DateRangeSchema,
+    seller_id: Optional[UUID] = Query(None, description="Filtro por vendedor específico"),
+    include_commissions: bool = Query(True, description="Incluir cálculo de comisiones"),
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "accountant"])),
+    db: Session = Depends(get_db)
+):
+    """
+    📊 Reporte de ventas por vendedor con performance individual y comisiones.
+    
+    **Incluye:**
+    - Total de ventas y monto por vendedor
+    - Ticket promedio y rangos de venta
+    - Días activos y ventas por día
+    - Cálculo de comisiones estimadas
+    - Participación de mercado
+    - Ranking por performance
+    
+    **Permisos:** Owner, Admin, Accountant
+    """
+    try:
+        reports_service = POSReportsService(db)
+        date_range_obj = DateRange(
+            start_date=date_range.start_date,
+            end_date=date_range.end_date
+        )
+        
+        return reports_service.get_sales_by_seller_report(
+            tenant_id=auth_context.tenant_id,
+            date_range=date_range_obj,
+            seller_id=seller_id,
+            pdv_id=auth_context.pdv_id,
+            include_commissions=include_commissions
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generando reporte de ventas por vendedor: {str(e)}"
+        )
+
+
+@reports_router.post("/cash-audit", response_model=CashAuditResponse)
+async def get_cash_audit_report(
+    date_range: DateRangeSchema,
+    include_trends: bool = Query(True, description="Incluir análisis de tendencias"),
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "accountant"])),
+    db: Session = Depends(get_db)
+):
+    """
+    📊 Reporte de arqueos detallados con diferencias históricas y tendencias.
+    
+    **Incluye:**
+    - Arqueos por caja con diferencias calculadas
+    - Análisis de exactitud y porcentajes de error
+    - Tendencias históricas de diferencias
+    - Clasificación por sobrantes/faltantes
+    - Recomendaciones de mejora
+    
+    **Permisos:** Owner, Admin, Accountant
+    """
+    try:
+        reports_service = POSReportsService(db)
+        date_range_obj = DateRange(
+            start_date=date_range.start_date,
+            end_date=date_range.end_date
+        )
+        
+        return reports_service.get_cash_audit_report(
+            tenant_id=auth_context.tenant_id,
+            date_range=date_range_obj,
+            pdv_id=auth_context.pdv_id,
+            include_trends=include_trends
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generando reporte de arqueos: {str(e)}"
+        )
+
+
+@reports_router.post("/shift-analysis", response_model=ShiftAnalysisResponse)
+async def get_shift_analysis_report(
+    date_range: DateRangeSchema,
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "accountant"])),
+    db: Session = Depends(get_db)
+):
+    """
+    📊 Análisis comparativo por turnos (mañana, tarde, noche).
+    
+    **Turnos definidos:**
+    - Mañana: 06:00 - 14:00
+    - Tarde: 14:00 - 22:00  
+    - Noche: 22:00 - 06:00
+    
+    **Incluye:**
+    - Ventas y montos por turno
+    - Vendedores activos por turno
+    - Ticket promedio por turno
+    - Comparación de performance
+    - Recomendaciones de optimización
+    
+    **Permisos:** Owner, Admin, Accountant
+    """
+    try:
+        reports_service = POSReportsService(db)
+        date_range_obj = DateRange(
+            start_date=date_range.start_date,
+            end_date=date_range.end_date
+        )
+        
+        return reports_service.get_shift_analysis_report(
+            tenant_id=auth_context.tenant_id,
+            date_range=date_range_obj,
+            pdv_id=auth_context.pdv_id
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generando análisis de turnos: {str(e)}"
+        )
+
+
+@reports_router.post("/top-products", response_model=TopProductsResponse)
+async def get_top_products_report(
+    date_range: DateRangeSchema,
+    limit: int = Query(20, ge=1, le=100, description="Número máximo de productos"),
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "seller"])),
+    db: Session = Depends(get_db)
+):
+    """
+    📊 Reporte de productos más vendidos en punto de venta.
+    
+    **Incluye:**
+    - Ranking por cantidad vendida
+    - Ingresos generados por producto
+    - Número de facturas que incluyen el producto
+    - Vendedores que han vendido cada producto
+    - Participación en ventas totales
+    - Índice de concentración de ventas
+    
+    **Permisos:** Owner, Admin, Accountant, Seller
+    """
+    try:
+        reports_service = POSReportsService(db)
+        date_range_obj = DateRange(
+            start_date=date_range.start_date,
+            end_date=date_range.end_date
+        )
+        
+        return reports_service.get_top_products_report(
+            tenant_id=auth_context.tenant_id,
+            date_range=date_range_obj,
+            pdv_id=auth_context.pdv_id,
+            limit=limit
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generando reporte de top productos: {str(e)}"
+        )
+
+
+# ===== ADVANCED PAYMENTS ROUTER =====
+
+payments_router = APIRouter(prefix="/payments", tags=["POS Advanced Payments"])
+
+
+@payments_router.post("/mixed", response_model=MixedPaymentResponse)
+async def process_mixed_payment(
+    payment_request: MixedPaymentRequest,
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "cashier"])),
+    db: Session = Depends(get_db)
+):
+    """
+    💳 Procesar pago mixto (efectivo + tarjeta + otros métodos).
+    
+    **Funcionalidades:**
+    - Múltiples métodos de pago en una venta
+    - Cálculo automático de vuelto
+    - Validación de montos y métodos
+    - Integración con caja registradora
+    - Registro de movimientos por método
+    
+    **Ejemplo de uso:**
+    ```json
+    {
+        "invoice_id": "uuid-factura",
+        "payments": [
+            {"method": "cash", "amount": 50000, "notes": "Efectivo"},
+            {"method": "card", "amount": 30000, "reference": "VISA-1234"}
+        ],
+        "cash_register_id": "uuid-caja"
+    }
+    ```
+    
+    **Permisos:** Owner, Admin, Seller, Cashier
+    """
+    try:
+        payment_service = AdvancedPaymentService(db)
+        
+        return payment_service.process_mixed_payment(
+            invoice_id=payment_request.invoice_id,
+            mixed_payments=[p.model_dump() for p in payment_request.payments],
+            tenant_id=auth_context.tenant_id,
+            user_id=auth_context.user_id,
+            cash_register_id=payment_request.cash_register_id
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error procesando pago mixto: {str(e)}"
+        )
+
+
+@payments_router.post("/qr/generate", response_model=QRPaymentResponse)
+async def generate_qr_payment(
+    qr_request: QRPaymentRequest,
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "cashier"])),
+    db: Session = Depends(get_db)
+):
+    """
+    📱 Generar código QR para pago con billetera digital.
+    
+    **Proveedores soportados:**
+    - Nequi
+    - DaviPlata
+    - Bancolombia QR
+    - PSE
+    - QR Genérico
+    
+    **Proceso:**
+    1. Genera código QR único
+    2. Crea datos específicos del proveedor
+    3. Establece tiempo de expiración
+    4. Retorna instrucciones para el usuario
+    
+    **Ejemplo de respuesta:**
+    ```json
+    {
+        "qr_code": "ABC123XYZ789",
+        "qr_data": "nequi://pay?amount=50000&ref=POS-001",
+        "expires_at": "2025-10-08T15:30:00Z",
+        "instructions": {
+            "title": "Pago con Nequi",
+            "steps": ["Abre Nequi", "Escanea QR", "Confirma"]
+        }
+    }
+    ```
+    
+    **Permisos:** Owner, Admin, Seller, Cashier
+    """
+    try:
+        payment_service = AdvancedPaymentService(db)
+        
+        return payment_service.generate_qr_payment(
+            invoice_id=qr_request.invoice_id,
+            amount=qr_request.amount,
+            provider=qr_request.provider,
+            tenant_id=auth_context.tenant_id,
+            expires_in_minutes=qr_request.expires_in_minutes
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generando QR de pago: {str(e)}"
+        )
+
+
+@payments_router.post("/qr/status", response_model=QRPaymentStatusResponse)
+async def check_qr_payment_status(
+    status_request: QRPaymentStatusRequest,
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "cashier"])),
+    db: Session = Depends(get_db)
+):
+    """
+    🔍 Verificar estado de pago QR.
+    
+    **Estados posibles:**
+    - `pending`: Esperando pago del usuario
+    - `processing`: Pago en proceso de confirmación
+    - `completed`: Pago exitoso confirmado
+    - `failed`: Pago falló o fue rechazado
+    - `expired`: QR expirado sin pago
+    
+    **Uso típico:**
+    - Polling cada 5-10 segundos mientras está pendiente
+    - Actualización de UI según el estado
+    - Confirmación automática cuando se completa
+    
+    **Permisos:** Owner, Admin, Seller, Cashier
+    """
+    try:
+        payment_service = AdvancedPaymentService(db)
+        
+        return payment_service.verify_qr_payment_status(
+            qr_code=status_request.qr_code,
+            tenant_id=auth_context.tenant_id
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error verificando estado de QR: {str(e)}"
+        )
+
+
+@payments_router.post("/validate", response_model=PaymentValidationResponse)
+async def validate_payment_methods(
+    payment_request: MixedPaymentRequest,
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "cashier"])),
+    db: Session = Depends(get_db)
+):
+    """
+    ✅ Validar métodos y límites de pago antes de procesar.
+    
+    **Validaciones incluidas:**
+    - Límites por método de pago
+    - Restricciones por tenant
+    - Validación de montos mínimos/máximos
+    - Detección de patrones sospechosos
+    
+    **Respuesta:**
+    ```json
+    {
+        "valid": true,
+        "warnings": ["Monto alto detectado en efectivo"],
+        "errors": []
+    }
+    ```
+    
+    **Uso recomendado:**
+    - Validar antes de mostrar métodos de pago
+    - Advertir al usuario sobre límites
+    - Prevenir errores en el procesamiento
+    
+    **Permisos:** Owner, Admin, Seller, Cashier
+    """
+    try:
+        payment_service = AdvancedPaymentService(db)
+        
+        return payment_service.validate_payment_limits(
+            tenant_id=auth_context.tenant_id,
+            payment_data=[p.model_dump() for p in payment_request.payments]
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error validando métodos de pago: {str(e)}"
+        )
+
+
+# ===============================
+# MULTI-CASH ENDPOINTS (v1.3.0)
+# ===============================
+
+multi_cash_router = APIRouter(prefix="/multi-cash", tags=["Multi-Cash Management"])
+
+@multi_cash_router.post("/session/create", response_model=MultiCashSessionResponse)
+async def create_multi_cash_session(
+    session_data: MultiCashSessionCreate,
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "supervisor"])),
+    db: Session = Depends(get_db)
+):
+    """
+    🏪 **Crear Sesión Multi-Caja**
+    
+    Permite abrir múltiples cajas registradoras simultáneamente en el mismo PDV.
+    Ideal para períodos de alta demanda o turnos solapados.
+    
+    **Características:**
+    - ✅ Caja principal + cajas secundarias
+    - ✅ Balanceador de carga automático
+    - ✅ Supervisión centralizada
+    - ✅ Validación de permisos por ubicación
+    
+    **Permisos requeridos:** Owner, Admin, Supervisor
+    
+    **Ejemplo:**
+    ```json
+    {
+        "location_id": "550e8400-e29b-41d4-a716-446655440000",
+        "primary_balance": 200000.00,
+        "secondary_balances": [100000.00, 150000.00],
+        "session_notes": "Black Friday - Turno intensivo",
+        "enable_load_balancing": true,
+        "allow_existing": false
+    }
+    ```
+    """
+    try:
+        service = MultiCashService(db)
+        return service.create_multi_cash_session(
+            session_data, 
+            auth_context.user, 
+            auth_context.tenant_id
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creando sesión multi-caja: {str(e)}"
+        )
+
+@multi_cash_router.get("/load-balancing/suggest")
+async def get_load_balancing_suggestion(
+    location_id: UUID,
+    sale_amount: Decimal,
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "cashier"])),
+    db: Session = Depends(get_db)
+):
+    """
+    ⚖️ **Sugerencia de Balanceador de Carga**
+    
+    Recomienda la mejor caja registradora para procesar una nueva venta
+    basado en algoritmos de distribución de carga.
+    
+    **Factores considerados:**
+    - 📊 Número de ventas actuales
+    - 💰 Monto acumulado por caja
+    - ⚡ Balance actual de efectivo
+    - 🎯 Capacidad operativa
+    
+    **Algoritmos disponibles:**
+    - `least_loaded`: Menor carga de trabajo
+    - `round_robin`: Rotación secuencial
+    - `sales_based`: Basado en monto de ventas
+    
+    **Respuesta incluye:**
+    - Caja recomendada con justificación
+    - Métricas de todas las cajas activas
+    - Efectividad del balanceador
+    """
+    try:
+        service = MultiCashService(db)
+        return service.get_load_balancing_suggestion(
+            location_id, 
+            auth_context.tenant_id, 
+            sale_amount
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error obteniendo sugerencia de balanceador: {str(e)}"
+        )
+
+@multi_cash_router.post("/shift/transfer", response_model=ShiftTransferResponse)
+async def transfer_shift(
+    transfer_data: ShiftTransferRequest,
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "supervisor", "seller", "cashier"])),
+    db: Session = Depends(get_db)
+):
+    """
+    🔄 **Transferencia de Turno**
+    
+    Permite transferir la responsabilidad de cajas registradoras entre operadores
+    sin necesidad de cerrar las cajas, facilitando turnos solapados.
+    
+    **Proceso automático:**
+    1. ✅ Valida permisos del operador actual
+    2. 📊 Calcula balance intermedio de cajas
+    3. 📝 Registra movimiento de transferencia
+    4. 🔔 Notifica al nuevo operador
+    5. 📋 Genera reporte de transferencia
+    
+    **Casos de uso:**
+    - Cambios de turno sin interrumpir operaciones
+    - Transferencia por descansos o emergencias
+    - Rotación de personal en horas pico
+    - Supervisión temporal de cajas
+    
+    **Permisos:** Owner, Admin, Supervisor, Operador actual
+    """
+    try:
+        service = MultiCashService(db)
+        return service.transfer_shift(
+            transfer_data, 
+            auth_context.user, 
+            auth_context.tenant_id
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error en transferencia de turno: {str(e)}"
+        )
+
+@multi_cash_router.post("/audit/consolidated", response_model=ConsolidatedAuditResponse)
+async def consolidated_audit(
+    location_id: UUID,
+    register_ids: List[UUID],
+    audit_date: Optional[date] = None,
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "accountant", "supervisor"])),
+    db: Session = Depends(get_db)
+):
+    """
+    🔍 **Auditoría Consolidada**
+    
+    Realiza una auditoría integral de múltiples cajas registradoras,
+    proporcionando un análisis completo del desempeño y precisión.
+    
+    **Métricas incluidas:**
+    - 💰 Balances consolidados (apertura, actual, diferencias)
+    - 📊 Movimientos totales y por tipo
+    - 🎯 Análisis de ventas y tickets promedio
+    - ⚖️ Distribución de carga entre cajas
+    - 📈 KPIs de eficiencia operativa
+    
+    **Recomendaciones automáticas:**
+    - Optimización de distribución de ventas
+    - Identificación de cajas inactivas
+    - Sugerencias de rebalanceo
+    - Alertas de alta actividad
+    
+    **Permisos:** Owner, Admin, Accountant, Supervisor
+    """
+    try:
+        service = MultiCashService(db)
+        return service.consolidate_audit(
+            location_id, 
+            register_ids, 
+            auth_context.tenant_id, 
+            audit_date
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error en auditoría consolidada: {str(e)}"
+        )
+
+@multi_cash_router.post("/session/close")
+async def close_multi_cash_session(
+    session_close_data: MultiCashSessionClose,
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "supervisor"])),
+    db: Session = Depends(get_db)
+):
+    """
+    🔐 **Cerrar Sesión Multi-Caja**
+    
+    Cierra todas las cajas de una sesión multi-caja con auditoría consolidada
+    y cálculo automático de diferencias y ajustes.
+    
+    **Proceso automático:**
+    1. ✅ Valida permisos de cierre
+    2. 📊 Calcula balance teórico vs declarado
+    3. 💸 Genera ajustes por diferencias
+    4. 📋 Consolida métricas de la sesión
+    5. 🏆 Calcula porcentaje de precisión
+    
+    **Datos de respuesta:**
+    - Resumen de cada caja cerrada
+    - Diferencias totales y por caja
+    - Métricas consolidadas de precisión
+    - Recomendaciones para futuras sesiones
+    
+    **Permisos:** Owner, Admin, Supervisor
+    """
+    try:
+        service = MultiCashService(db)
+        return service.close_multi_cash_session(
+            session_close_data, 
+            auth_context.user, 
+            auth_context.tenant_id
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error cerrando sesión multi-caja: {str(e)}"
+        )
+
+
+# ===============================
+# REAL-TIME ANALYTICS ENDPOINTS (v1.3.0)
+# ===============================
+
+analytics_router = APIRouter(prefix="/analytics", tags=["Real-Time Analytics"])
+
+@analytics_router.get("/dashboard/live", response_model=LiveDashboardResponse)
+async def get_live_dashboard(
+    location_id: Optional[UUID] = Query(None, description="ID del PDV (opcional, todas las ubicaciones si es None)"),
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "supervisor", "accountant"])),
+    db: Session = Depends(get_db)
+):
+    """
+    📊 **Dashboard en Tiempo Real**
+    
+    Proporciona un dashboard completo con métricas en vivo para monitoreo 
+    operativo y toma de decisiones inmediatas.
+    
+    **Métricas incluidas:**
+    - 💰 Ventas del día y hora actual
+    - 🏪 Estado de cajas registradoras activas
+    - 📈 Desglose por horas de ventas
+    - 🏆 Top productos del día
+    - 📊 Comparaciones vs ayer y semana pasada
+    - 🚨 Alertas activas del sistema
+    - ⚡ Indicadores de performance (velocidad, conversión)
+    
+    **Actualizaciones automáticas:**
+    - Datos se actualizan cada 30 segundos
+    - WebSocket disponible para updates en tiempo real
+    - Cálculos eficientes para respuesta rápida
+    
+    **Casos de uso:**
+    - Monitoreo de gerentes y supervisores
+    - Dashboard en pantallas de control
+    - Toma de decisiones operativas
+    - Identificación de oportunidades y problemas
+    
+    **Permisos:** Owner, Admin, Supervisor, Accountant
+    """
+    try:
+        service = RealTimeAnalyticsService(db)
+        return service.get_live_dashboard(location_id, auth_context.tenant_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error obteniendo dashboard en vivo: {str(e)}"
+        )
+
+@analytics_router.get("/targets/check", response_model=SalesTargetCheck)
+async def check_sales_targets(
+    location_id: Optional[UUID] = Query(None, description="ID del PDV"),
+    daily_target: Optional[Decimal] = Query(None, description="Meta diaria de ventas"),
+    monthly_target: Optional[Decimal] = Query(None, description="Meta mensual de ventas"),
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "supervisor"])),
+    db: Session = Depends(get_db)
+):
+    """
+    🎯 **Verificación de Metas de Ventas**
+    
+    Monitorea el progreso hacia las metas de ventas diarias y mensuales,
+    proporcionando alertas tempranas y recomendaciones.
+    
+    **Análisis incluido:**
+    - ✅ Progreso diario vs meta establecida
+    - 📅 Progreso mensual con proyección
+    - 📊 Porcentaje de cumplimiento actual
+    - 💡 Recomendaciones automáticas
+    - 🚨 Alertas de metas en riesgo
+    
+    **Cálculos inteligentes:**
+    - Progreso esperado basado en días transcurridos
+    - Proyección de cumplimiento final
+    - Velocidad de ventas necesaria para cumplir
+    - Identificación de tendencias positivas/negativas
+    
+    **Recomendaciones automáticas:**
+    - Estrategias para acelerar ventas
+    - Ajustes de metas realistas
+    - Promociones sugeridas
+    - Optimización de horarios
+    
+    **Permisos:** Owner, Admin, Supervisor
+    """
+    try:
+        service = RealTimeAnalyticsService(db)
+        return service.check_sales_targets(
+            location_id, 
+            auth_context.tenant_id, 
+            daily_target, 
+            monthly_target
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error verificando metas de ventas: {str(e)}"
+        )
+
+@analytics_router.get("/predictions", response_model=PredictiveAnalyticsResponse)
+async def get_predictive_analytics(
+    location_id: Optional[UUID] = Query(None, description="ID del PDV"),
+    prediction_days: int = Query(7, ge=1, le=30, description="Días a predecir (1-30)"),
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "supervisor"])),
+    db: Session = Depends(get_db)
+):
+    """
+    🔮 **Analytics Predictivo con IA**
+    
+    Utiliza machine learning básico e inteligencia artificial para predecir
+    tendencias futuras y proporcionar insights accionables.
+    
+    **Predicciones incluidas:**
+    - 📈 Forecast de ventas para próximos días
+    - 📊 Análisis de tendencias recientes
+    - 🔄 Patrones estacionales identificados
+    - 📦 Alertas de stock que se agotará
+    - 💹 Predicción de demanda por producto
+    
+    **Algoritmos utilizados:**
+    - Regresión lineal para ventas
+    - Análisis de series temporales
+    - Detección de patrones estacionales
+    - Algoritmos de demanda basados en histórico
+    
+    **Nivel de confianza:**
+    - Indicador de confiabilidad (0-100%)
+    - Factores que afectan la precisión
+    - Recomendaciones de mejora de datos
+    
+    **Casos de uso:**
+    - Planificación de inventario
+    - Estrategias de marketing
+    - Asignación de personal
+    - Presupuestos y proyecciones
+    
+    **Permisos:** Owner, Admin, Supervisor
+    """
+    try:
+        service = RealTimeAnalyticsService(db)
+        return service.get_predictive_analytics(
+            location_id, 
+            auth_context.tenant_id, 
+            prediction_days
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generando analytics predictivo: {str(e)}"
+        )
+
+@analytics_router.get("/alerts", response_model=List[AlertResponse])
+async def get_live_alerts(
+    location_id: Optional[UUID] = Query(None, description="ID del PDV"),
+    alert_types: Optional[List[str]] = Query(None, description="Tipos de alerta: stock, sales, cash, system"),
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "supervisor", "seller", "cashier"])),
+    db: Session = Depends(get_db)
+):
+    """
+    🚨 **Alertas en Tiempo Real**
+    
+    Sistema integral de alertas automáticas para identificar problemas
+    operativos y oportunidades de mejora en tiempo real.
+    
+    **Tipos de alertas:**
+    - 📦 **Stock**: Productos con bajo inventario, agotados, sobrestock
+    - 💰 **Sales**: Metas en riesgo, caídas en ventas, picos inusuales
+    - 🏪 **Cash**: Diferencias en arqueos, saldos altos, movimientos sospechosos
+    - ⚙️ **System**: Errores técnicos, rendimiento, conexiones
+    
+    **Niveles de prioridad:**
+    - 🔴 **Critical**: Requiere acción inmediata
+    - 🟠 **High**: Atención urgente necesaria
+    - 🟡 **Medium**: Revisar pronto
+    - 🟢 **Low**: Informativo
+    
+    **Características avanzadas:**
+    - Detección automática de patrones anómalos
+    - Alertas personalizables por ubicación
+    - Sistema de acknowledgment
+    - Historial de alertas
+    - Integración con notificaciones push
+    
+    **Filtros disponibles:**
+    - Por tipo de alerta
+    - Por nivel de prioridad
+    - Por ubicación específica
+    - Por estado (activa, resuelta, ignorada)
+    
+    **Permisos:** Todos los roles operativos
+    """
+    try:
+        service = RealTimeAnalyticsService(db)
+        return service.get_live_alerts(
+            location_id, 
+            auth_context.tenant_id, 
+            alert_types
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error obteniendo alertas en vivo: {str(e)}"
+        )
+
+@analytics_router.get("/comparative", response_model=ComparativeAnalyticsResponse)
+async def get_comparative_analytics(
+    comparison_period: str = Query("week", regex="^(day|week|month|year)$", description="Período de comparación"),
+    location_id: Optional[UUID] = Query(None, description="ID del PDV"),
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "supervisor", "accountant"])),
+    db: Session = Depends(get_db)
+):
+    """
+    📊 **Analytics Comparativo**
+    
+    Análisis detallado comparando el rendimiento actual con períodos anteriores
+    para identificar tendencias, patrones y oportunidades de mejora.
+    
+    **Períodos de comparación:**
+    - 📅 **Day**: Hoy vs Ayer
+    - 📆 **Week**: Esta semana vs Semana pasada
+    - 🗓️ **Month**: Este mes vs Mes pasado
+    - 📋 **Year**: Este año vs Año pasado
+    
+    **Métricas comparadas:**
+    - 💰 Ventas totales (cantidad y monto)
+    - 🎯 Ticket promedio
+    - 📈 Tasa de crecimiento
+    - 🔄 Tendencias identificadas
+    
+    **Análisis incluido:**
+    - Cambios absolutos y porcentuales
+    - Identificación de tendencias (alza, baja, estable)
+    - Factores que explican las variaciones
+    - Proyecciones basadas en tendencias
+    
+    **Insights automáticos:**
+    - Mejores y peores días/períodos
+    - Patrones estacionales
+    - Impacto de promociones o eventos
+    - Recomendaciones estratégicas
+    
+    **Visualización sugerida:**
+    - Gráficos de barras comparativos
+    - Líneas de tendencia
+    - Indicadores de crecimiento
+    - Alertas de cambios significativos
+    
+    **Permisos:** Owner, Admin, Supervisor, Accountant
+    """
+    try:
+        service = RealTimeAnalyticsService(db)
+        return service.get_comparative_analytics(
+            location_id, 
+            auth_context.tenant_id, 
+            comparison_period
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generando analytics comparativo: {str(e)}"
+        )

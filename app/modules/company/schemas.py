@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 from uuid import UUID
+from datetime import datetime
 import re
 from app.common.validators import validate_colombia_phone, validate_colombia_nit_base, format_colombia_phone, format_colombia_nit_base
 
@@ -149,4 +150,72 @@ class AssignUserToCompany(BaseModel):
     
 class CompanyOutWithRole(CompanyOut):
     role: str
+
+
+class CompanyMeDetail(BaseModel):
+    """Schema completo para /company/me con toda la información relacionada"""
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    address: Optional[str] = None
+    phone_number: str
+    nit: str = Field(..., description="NIT colombiano sin dígito de verificación")
+    economic_activity: Optional[str] = None
+    quantity_employees: str = Field(default="1-10", description="Number of employees range")
+    social_reason: Optional[str] = None
+    logo: Optional[str] = None
+    logo_url: Optional[str] = Field(None, description="Secure URL for logo access")
+    is_active: bool
+    created_at: datetime
+    
+    # User role in this company
+    user_role: str = Field(..., description="Role of the current user in this company")
+    
+    # PDVs relacionados con ubicaciones
+    pdvs: list['PDVWithLocation'] = Field(default=[], description="All PDVs with location details")
+    
+    class Config:
+        from_attributes = True
+
+
+class PDVWithLocation(BaseModel):
+    """Schema para PDV con información de ubicación completa"""
+    id: UUID = Field(..., description="Unique identifier of the PDV")
+    name: str = Field(..., description="Name of the PDV")
+    address: Optional[str] = Field(None, description="Address of the PDV")
+    phone_number: Optional[str] = Field(None, description="Phone number of the PDV")
+    is_main: bool = Field(default=False, description="If this is the main PDV")
+    is_active: bool = Field(..., description="Indicates if the PDV is active")
+    created_at: Optional[datetime] = Field(None, description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+    
+    # Location information
+    department_id: Optional[int] = Field(None, description="Department ID")
+    city_id: Optional[int] = Field(None, description="City ID")
+    department: Optional['DepartmentOut'] = Field(None, description="Department details")
+    city: Optional['CityOut'] = Field(None, description="City details")
+
+    class Config:
+        from_attributes = True
+
+
+class DepartmentOut(BaseModel):
+    """Schema para departamentos"""
+    id: int = Field(..., description="Department ID")
+    name: str = Field(..., description="Department name")
+    code: str = Field(..., description="Department DANE code")
+
+    class Config:
+        from_attributes = True
+
+
+class CityOut(BaseModel):
+    """Schema para ciudades"""
+    id: int = Field(..., description="City ID")
+    name: str = Field(..., description="City name")
+    code: str = Field(..., description="City DANE code")
+    department_id: int = Field(..., description="Department ID")
+
+    class Config:
+        from_attributes = True
     
