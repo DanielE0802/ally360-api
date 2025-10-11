@@ -1,5 +1,6 @@
 import secrets
 import string
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple
 from uuid import UUID, uuid4
@@ -25,6 +26,9 @@ from app.modules.email.tasks import (
     send_password_reset_email_task
 )
 from app.core.config import settings
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 class AuthService:
     """
@@ -437,6 +441,42 @@ class AuthService:
         reset_token.used_at = datetime.now(timezone.utc)
 
         self.db.commit()
+        return user
+
+    def change_password(self, user_id: UUID, current_password: str, new_password: str) -> User:
+        """Cambiar contraseña de usuario autenticado."""
+        # Obtener el usuario
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no encontrado"
+            )
+
+        # Verificar contraseña actual
+        if not verify_password(current_password, user.password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Contraseña actual incorrecta"
+            )
+
+        # Verificar que la nueva contraseña sea diferente
+        if verify_password(new_password, user.password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La nueva contraseña debe ser diferente a la actual"
+            )
+
+        # Actualizar contraseña
+        user.password = hash_password(new_password)
+        user.updated_at = datetime.now(timezone.utc)
+
+        self.db.commit()
+        self.db.refresh(user)
+
+        # Log de seguridad (opcional)
+        logger.info(f"Password changed for user {user.email} (ID: {user.id})")
+
         return user
 
     def invite_user(

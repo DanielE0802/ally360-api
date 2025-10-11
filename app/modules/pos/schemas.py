@@ -80,6 +80,7 @@ class CashRegisterOpen(BaseModel):
     """Esquema para abrir caja registradora"""
     opening_balance: Decimal = Field(..., ge=0, description="Saldo inicial de apertura")
     opening_notes: Optional[str] = Field(None, max_length=500, description="Notas de apertura")
+    seller_id: Optional[UUID] = Field(None, description="ID del vendedor responsable de la caja")
 
 
 class CashRegisterClose(BaseModel):
@@ -92,6 +93,7 @@ class CashRegisterOut(BaseModel):
     """Esquema de salida para caja registradora"""
     id: UUID = Field(description="ID único de la caja")
     pdv_id: UUID = Field(description="ID del PDV")
+    seller_id: Optional[UUID] = Field(None, description="ID del vendedor responsable")
     name: str = Field(description="Nombre de la caja")
     status: CashRegisterStatus = Field(description="Estado de la caja")
     opening_balance: Decimal = Field(description="Saldo de apertura")
@@ -112,6 +114,8 @@ class CashRegisterDetail(CashRegisterOut):
     """Esquema detallado de caja registradora con movimientos"""
     # Información adicional
     pdv_name: Optional[str] = Field(None, description="Nombre del PDV")
+    seller_name: Optional[str] = Field(None, description="Nombre del vendedor responsable")
+    seller_email: Optional[str] = Field(None, description="Email del vendedor")
     opened_by_name: Optional[str] = Field(None, description="Nombre del usuario que abrió")
     closed_by_name: Optional[str] = Field(None, description="Nombre del usuario que cerró")
     

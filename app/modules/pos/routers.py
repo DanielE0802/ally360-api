@@ -85,12 +85,19 @@ async def open_cash_register(
     Abrir caja registradora en el PDV del contexto JWT.
     
     - **opening_balance**: Saldo inicial de apertura
-    - **opening_notes**: Notas opcionales de apertura
+    - **opening_notes**: Notas opcionales de apertura  
+    - **seller_id**: ID del vendedor responsable (opcional, para reportes)
     
     Validaciones:
     - Solo una caja abierta por PDV simultáneamente
     - PDV debe existir y pertenecer al tenant
+    - Seller (si se proporciona) debe existir y estar activo
     - Usuario debe tener permisos de caja
+    
+    Beneficios de asociar vendedor:
+    - Reportes de ventas por vendedor
+    - Comisiones y análisis de performance
+    - Auditoría mejorada de operaciones
     """
     service = CashRegisterService(db)
     return service.open_cash_register(
@@ -99,6 +106,28 @@ async def open_cash_register(
         tenant_id=auth_context.tenant_id,
         user_id=auth_context.user_id
     )
+
+
+@cash_registers_router.get("/current", response_model=CashRegisterOut)
+async def get_current_cash_register(
+    pdv_id: UUID = Query(..., description="ID del punto de venta"),
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "cashier"])),
+    db: Session = Depends(get_db)
+):
+    """
+    Devuelve la caja abierta actual para el PDV indicado.
+    
+    - 404 si no hay caja abierta
+    - Multi-tenant: filtra por tenant_id del contexto
+    """
+    service = CashRegisterService(db)
+    register = service.get_current_cash_register(
+        tenant_id=auth_context.tenant_id,
+        pdv_id=pdv_id
+    )
+    if not register:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay caja abierta para este PDV")
+    return register
 
 
 @cash_registers_router.post("/{register_id}/close", response_model=CashRegisterOut)
@@ -403,6 +432,30 @@ async def delete_seller(
 # ===== POS INVOICES ROUTER =====
 
 pos_invoices_router = APIRouter(prefix="/pos/sales", tags=["POS"])
+
+# Shift endpoints (current shift is derived from current open cash register)
+shift_router = APIRouter(prefix="/pos/shift", tags=["POS"])
+
+
+@shift_router.get("/current", response_model=CashRegisterOut)
+async def get_current_shift(
+    pdv_id: UUID = Query(..., description="ID del punto de venta"),
+    auth_context: AuthContext = Depends(AuthDependencies.require_role(["owner", "admin", "seller", "cashier"])),
+    db: Session = Depends(get_db)
+):
+    """
+    Devuelve el turno actual vinculado al PDV.
+
+    Nota: En este diseño, el turno actual es 1:1 con la caja abierta actual.
+    """
+    service = CashRegisterService(db)
+    register = service.get_current_cash_register(
+        tenant_id=auth_context.tenant_id,
+        pdv_id=pdv_id
+    )
+    if not register:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay turno/caja abierto para este PDV")
+    return register
 
 
 @pos_invoices_router.post("/", response_model=POSInvoiceOut, status_code=status.HTTP_201_CREATED)

@@ -55,6 +55,7 @@ class CashRegister(Base, TenantMixin, TimestampMixin):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     pdv_id = Column(UUID(as_uuid=True), ForeignKey("pdvs.id"), nullable=False, index=True)
+    seller_id = Column(UUID(as_uuid=True), ForeignKey("sellers.id"), nullable=True, index=True)
     name = Column(String(100), nullable=False, index=True)
     status = Column(Enum(CashRegisterStatus), nullable=False, default=CashRegisterStatus.CLOSED, index=True)
     
@@ -74,6 +75,7 @@ class CashRegister(Base, TenantMixin, TimestampMixin):
 
     # Relationships
     pdv = relationship("PDV")
+    seller = relationship("Seller", foreign_keys=[seller_id])
     opened_by_user = relationship("User", foreign_keys=[opened_by])
     closed_by_user = relationship("User", foreign_keys=[closed_by])
     movements = relationship("CashMovement", back_populates="cash_register", cascade="all, delete-orphan")

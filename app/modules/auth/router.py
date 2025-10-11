@@ -10,7 +10,7 @@ from app.modules.auth.models import User
 from app.modules.auth.schemas import (
     UserCreate, UserLogin, UserOut, TokenResponse, ContextTokenResponse,
     EmailVerificationRequest, EmailVerificationConfirm, EmailVerificationWithAutoLogin, EmailVerificationResponse,
-    PasswordResetRequest, PasswordResetConfirm,
+    PasswordResetRequest, PasswordResetConfirm, PasswordChangeRequest,
     CompanyInvitationCreate, CompanyInvitationOut, CompanyInvitationAccept,
     CompanyInvitationAcceptExisting, InvitationInfo,
     CompanySelectionRequest, AuthContext, RefreshTokenRequest,
@@ -143,6 +143,42 @@ async def reset_password(
     return {
         "message": "Contraseña restablecida exitosamente",
         "user_id": str(user.id)
+    }
+
+@auth_router.post("/change-password", response_model=dict)
+async def change_password(
+    password_data: PasswordChangeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Cambiar contraseña dentro de sesión autenticada.
+    
+    Requiere:
+    - Token JWT válido
+    - Contraseña actual correcta
+    - Nueva contraseña diferente a la actual
+    - Confirmación de nueva contraseña
+    
+    Validaciones automáticas:
+    - La contraseña actual debe ser correcta
+    - La nueva contraseña debe tener al menos 8 caracteres
+    - La nueva contraseña debe ser diferente a la actual
+    - Las contraseñas nueva y confirmación deben coincidir
+    """
+    auth_service = AuthService(db)
+    
+    # Cambiar contraseña
+    user = auth_service.change_password(
+        user_id=current_user.id,
+        current_password=password_data.current_password,
+        new_password=password_data.new_password
+    )
+    
+    return {
+        "message": "Contraseña cambiada exitosamente",
+        "user_id": str(user.id),
+        "changed_at": user.updated_at.isoformat()
     }
 
 @auth_router.post("/invite-user", response_model=dict)

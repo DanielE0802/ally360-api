@@ -290,8 +290,9 @@ class CashRegister(Base, TenantMixin):
     
     id: UUID              # Identificador único
     tenant_id: UUID       # Multi-tenancy
-    location_id: UUID     # PDV/Sucursal
-    name: str             # "Caja Principal - 20250108"
+    pdv_id: UUID          # PDV/Sucursal
+    seller_id: UUID       # Vendedor responsable (nullable)
+    name: str             # "Caja Principal - Juan Pérez - 20250108"
     opening_balance: Decimal   # Saldo inicial
     closing_balance: Decimal   # Saldo final (nullable)
     status: CashRegisterStatus # open/closed
@@ -303,7 +304,11 @@ class CashRegister(Base, TenantMixin):
     closing_notes: str    # Notas cierre (nullable)
     
     # Relaciones
+    pdv: PDV                     # Punto de venta
+    seller: Seller              # Vendedor responsable
     movements: List[CashMovement]
+    opened_by_user: User        # Usuario que abrió
+    closed_by_user: User        # Usuario que cerró
     
     # Propiedades calculadas
     @property
@@ -496,11 +501,21 @@ class AdvancedPaymentService:
 #### `POST /cash-registers/open` - Abrir Caja
 ```json
 {
-    "location_id": "550e8400-e29b-41d4-a716-446655440000",
     "opening_balance": 100000.00,
-    "opening_notes": "Apertura turno mañana"
+    "opening_notes": "Apertura turno mañana",
+    "seller_id": "550e8400-e29b-41d4-a716-446655440001"  // Opcional
 }
 ```
+
+**Query Parameters:**
+- `pdv_id`: ID del punto de venta (requerido)
+
+**Beneficios de asociar vendedor:**
+- ✅ Reportes de ventas por vendedor 
+- ✅ Cálculo automático de comisiones
+- ✅ Análisis de performance individual
+- ✅ Auditoría mejorada de operaciones
+- ✅ Trazabilidad completa de responsabilidades
 
 #### `POST /cash-registers/{id}/close` - Cerrar Caja
 ```json
@@ -716,10 +731,11 @@ Con búsqueda por nombre y filtro de activos.
 
 ```python
 # 1. Abrir caja (si no está abierta)
-POST /cash-registers/open
+POST /cash-registers/open?pdv_id=pdv_001
 {
-    "location_id": "pdv_001",
-    "opening_balance": 100000.00
+    "opening_balance": 100000.00,
+    "opening_notes": "Inicio turno mañana",
+    "seller_id": "seller_001"  // Vendedor responsable
 }
 
 # 2. Procesar venta

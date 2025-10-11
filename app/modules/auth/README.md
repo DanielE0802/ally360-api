@@ -213,6 +213,7 @@ sequenceDiagram
 | `POST` | `/auth/resend-verification` | Reenviar verificación | No |
 | `POST` | `/auth/forgot-password` | Solicitar reset contraseña | No |
 | `POST` | `/auth/reset-password` | Cambiar contraseña con token | No |
+| `POST` | `/auth/change-password` | Cambiar contraseña autenticado | Context Token |
 
 ### **Gestión de Invitaciones**
 
@@ -230,7 +231,6 @@ sequenceDiagram
 | `GET` | `/auth/me` | Información del usuario | Context Token |
 | `PUT` | `/auth/me` | Actualizar perfil | Context Token |
 | `GET` | `/auth/companies` | Listar mis empresas | Access Token |
-| `PUT` | `/auth/change-password` | Cambiar contraseña | Context Token |
 
 ## 👥 Sistema de Roles y Permisos
 
@@ -352,6 +352,35 @@ response = await auth_service.invite_user(
     invite_data=invite_data,
     invited_by=current_user.id
 )
+```
+
+### **Cambio de Contraseña Autenticado**
+```javascript
+// Cambiar contraseña dentro de sesión activa
+const changePasswordResponse = await fetch('/auth/change-password', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${context_token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    current_password: 'password123',
+    new_password: 'newSecurePassword456',
+    confirm_password: 'newSecurePassword456'
+  })
+});
+
+if (changePasswordResponse.ok) {
+  const result = await changePasswordResponse.json();
+  console.log('Contraseña cambiada exitosamente:', result.message);
+} else {
+  const error = await changePasswordResponse.json();
+  console.error('Error:', error.detail);
+  // Casos comunes:
+  // - "Contraseña actual incorrecta"
+  // - "La nueva contraseña debe ser diferente a la actual"
+  // - "Las contraseñas no coinciden"
+}
 ```
 
 ### **Validación de Roles en Endpoints**

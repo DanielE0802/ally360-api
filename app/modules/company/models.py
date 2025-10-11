@@ -18,6 +18,7 @@ class Company(Base):
     logo = Column(String, nullable=True)
     quantity_employees = Column(String, default="1-10")
     economic_activity = Column(String, nullable=True)
+    unique_pdv = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

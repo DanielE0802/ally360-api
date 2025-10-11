@@ -193,6 +193,27 @@ class PasswordResetConfirm(BaseModel):
             raise ValueError('La contraseña debe tener al menos 8 caracteres')
         return v
 
+# Password change schema (for authenticated users)
+class PasswordChangeRequest(BaseModel):
+    """Schema for changing password within authenticated session"""
+    current_password: str = Field(..., description="Contraseña actual")
+    new_password: str = Field(..., min_length=8, description="Nueva contraseña")
+    confirm_password: str = Field(..., min_length=8, description="Confirmación de nueva contraseña")
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v):
+        if len(v) < 8:
+            raise ValueError('La nueva contraseña debe tener al menos 8 caracteres')
+        return v
+
+    @field_validator('confirm_password')
+    @classmethod
+    def validate_passwords_match(cls, v, info):
+        if 'new_password' in info.data and v != info.data['new_password']:
+            raise ValueError('Las contraseñas no coinciden')
+        return v
+
 # Company invitation schemas
 class CompanyInvitationCreate(BaseModel):
     email: EmailStr

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError
 from app.modules.company.schemas import CompanyCreate, CompanyOutWithRole, AssignUserToCompany
 from app.modules.auth.utils import create_access_token
 from app.dependencies.dbDependecies import db_dependency
@@ -26,11 +27,40 @@ def create_company(db: db_dependency, company_data: CompanyCreate, current_user:
     # Extract uniquePDV flag before creating company
     unique_pdv = company_data.uniquePDV
     company_dict = company_data.model_dump()
-    del company_dict['uniquePDV']  # Remove from company data as it's not a company field
+    del company_dict['uniquePDV']  # Remove from company data as it will be saved as unique_pdv
+    company_dict['unique_pdv'] = unique_pdv  # Add the correct field name for the model
 
     company = Company(**company_dict)
     db.add(company)
-    db.flush()
+    
+    try:
+        db.flush()
+    except IntegrityError as e:
+        db.rollback()
+        error_msg = str(e.orig)
+        
+        # Handle specific constraint violations with user-friendly messages
+        if "phone_number" in error_msg and "unique constraint" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="El número de teléfono ya está registrado por otra empresa"
+            )
+        elif "nit" in error_msg and "unique constraint" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="El NIT ya está registrado por otra empresa"
+            )
+        elif "name" in error_msg and "unique constraint" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="El nombre de la empresa ya existe"
+            )
+        else:
+            # Generic message for other integrity errors
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Los datos proporcionados ya están en uso por otra empresa"
+            )
 
     user_company = UserCompany(user_id=current_user.id, company_id=company.id, is_active=True, role="admin")
     db.add(user_company)
@@ -62,8 +92,16 @@ def create_company(db: db_dependency, company_data: CompanyCreate, current_user:
             # If inventory service fails, log but don't fail company creation
             print(f"Warning: Could not initialize stock for main PDV: {e}")
 
-    db.commit()
-    db.refresh(company)
+    try:
+        db.commit()
+        db.refresh(company)
+    except IntegrityError as e:
+        db.rollback()
+        # This shouldn't happen since we already flushed, but just in case
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Error al crear la empresa: datos duplicados"
+        )
 
     # Prepare response with company data and additional info
     company_dict = {

@@ -30,7 +30,8 @@ from app.modules.pos.routers import (
     cash_registers_router, 
     cash_movements_router, 
     sellers_router, 
-    pos_invoices_router
+    pos_invoices_router,
+    shift_router
 )
 from app.modules.reports.routers import (
     sales_router as sales_reports_router,
@@ -105,15 +106,16 @@ app.include_router(brand_router, prefix="/brands", tags=["Brands"])
 app.include_router(taxes_router, tags=["Taxes"])
 app.include_router(invoices_router)
 app.include_router(bills_router)
-app.include_router(cash_registers_router, prefix="/api/v1")
-app.include_router(cash_movements_router, prefix="/api/v1")
-app.include_router(sellers_router, prefix="/api/v1")
-app.include_router(pos_invoices_router, prefix="/api/v1")
-app.include_router(sales_reports_router, prefix="/api/v1")
-app.include_router(purchases_reports_router, prefix="/api/v1")  
-app.include_router(inventory_reports_router, prefix="/api/v1")
-app.include_router(cash_registers_reports_router, prefix="/api/v1")
-app.include_router(financial_reports_router, prefix="/api/v1")
+app.include_router(cash_registers_router)
+app.include_router(cash_movements_router)
+app.include_router(sellers_router)
+app.include_router(pos_invoices_router)
+app.include_router(shift_router)
+app.include_router(sales_reports_router)
+app.include_router(purchases_reports_router)  
+app.include_router(inventory_reports_router)
+app.include_router(cash_registers_reports_router)
+app.include_router(financial_reports_router)
 app.include_router(contacts_router, tags=["Contacts"])
 app.include_router(stock_router, tags=["Inventory"])
 app.include_router(movements_router, tags=["Inventory"])

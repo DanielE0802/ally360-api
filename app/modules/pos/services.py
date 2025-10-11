@@ -61,6 +61,21 @@ class CashRegisterService:
                     detail="PDV no encontrado"
                 )
             
+            # Validar seller_id si se proporciona
+            seller = None
+            if register_data.seller_id:
+                seller = self.db.query(Seller).filter(
+                    Seller.id == register_data.seller_id,
+                    Seller.tenant_id == tenant_id,
+                    Seller.is_active == True
+                ).first()
+                
+                if not seller:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Vendedor no encontrado o inactivo"
+                    )
+            
             # Verificar que no hay otra caja abierta en el mismo PDV
             existing_open = self.db.query(CashRegister).filter(
                 CashRegister.tenant_id == tenant_id,
@@ -75,11 +90,13 @@ class CashRegisterService:
                 )
             
             # Crear nueva caja con nombre automático si no se especifica
-            register_name = f"Caja {pdv.name} - {datetime.now().strftime('%Y%m%d')}"
+            seller_name = f" - {seller.name}" if seller else ""
+            register_name = f"Caja {pdv.name}{seller_name} - {datetime.now().strftime('%Y%m%d')}"
             
             new_register = CashRegister(
                 tenant_id=tenant_id,
                 pdv_id=pdv_id,
+                seller_id=register_data.seller_id,
                 name=register_name,
                 status=CashRegisterStatus.OPEN,
                 opening_balance=register_data.opening_balance,
@@ -108,6 +125,21 @@ class CashRegisterService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error interno del servidor: {str(e)}"
             )
+
+    def get_current_cash_register(self, tenant_id: UUID, pdv_id: UUID) -> Optional[CashRegister]:
+        """
+        Obtener la caja abierta actual para un PDV específico.
+
+        Retorna None si no existe caja abierta para ese PDV.
+        """
+        register = self.db.query(CashRegister).filter(
+            and_(
+                CashRegister.tenant_id == tenant_id,
+                CashRegister.pdv_id == pdv_id,
+                CashRegister.status == CashRegisterStatus.OPEN
+            )
+        ).first()
+        return register
 
     def close_cash_register(self, register_id: UUID, close_data: CashRegisterClose,
                            tenant_id: UUID, user_id: UUID) -> CashRegister:
@@ -208,7 +240,11 @@ class CashRegisterService:
         """Obtener detalle de caja registradora con movimientos"""
         try:
             register = self.db.query(CashRegister).options(
-                selectinload(CashRegister.movements)
+                selectinload(CashRegister.movements),
+                selectinload(CashRegister.seller),
+                selectinload(CashRegister.pdv),
+                selectinload(CashRegister.opened_by_user),
+                selectinload(CashRegister.closed_by_user)
             ).filter(
                 CashRegister.id == register_id,
                 CashRegister.tenant_id == tenant_id

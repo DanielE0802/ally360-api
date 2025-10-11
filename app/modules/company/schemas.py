@@ -69,10 +69,11 @@ class CompanyOut(BaseModel):
     quantity_employees: str = Field(default="1-10", description="Number of employees range, e.g., '1-10', '50-100', '500+'")
     social_reason: Optional[str] = None
     logo: Optional[str] = None
-    uniquePDV: bool = Field(default=False, description="Create a main PDV automatically with company information")
+    uniquePDV: bool = Field(default=False, description="Indicates if company has a main PDV", alias="unique_pdv")
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 class CompanyCreateResponse(BaseModel):
     """Response schema for company creation with PDV creation info"""

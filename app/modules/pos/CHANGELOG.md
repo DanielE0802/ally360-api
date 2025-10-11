@@ -1,4 +1,6 @@
-# 📋 CHAN## [Unreleased] - Próximas Funcionalidades
+# 📋 CHANGELOG
+
+## [Unreleased] - Próximas Funcionalidades
 
 ### Planned
 - 🤖 Analytics e inteligencia artificial para predicciones avanzadas
@@ -6,6 +8,31 @@
 - 🔄 Sincronización offline completa
 - 🎯 Integración CRM con clientes frecuentes
 - 🌐 Omnichannel para inventario unificado
+
+---
+
+## [1.3.1] - 2025-01-08 - Seller Integration
+
+### Added - Integración con Vendedores
+
+#### 🏪 Cash Register - Seller Relationship
+- **Seller assignment**: Vinculación opcional de vendedor a caja registradora
+  - Campo `seller_id` en CashRegister (nullable)
+  - Validación de vendedor activo en apertura
+  - Inclusión del nombre del vendedor en nombre de caja automático
+  - Información extendida en CashRegisterDetail
+
+- **Enhanced reporting**: Mejoras en reportes
+  - Datos de vendedor en esquemas de salida
+  - Trazabilidad completa para auditoría
+  - Base para reportes de comisiones futuras
+  - Análisis de performance por vendedor
+
+### Technical
+- ✅ Migración de schema para `cash_registers.seller_id`
+- ✅ Actualización de servicios y validaciones
+- ✅ Documentación extendida con casos de uso
+- ✅ Esquemas de salida enriquecidos
 
 ---
 

@@ -2,6 +2,52 @@
 
 Historial de cambios y evolución del módulo de autenticación de **Ally360 ERP SaaS**.
 
+## 🚀 [1.1.0] - 2025-01-09 - **Cambio de Contraseña Autenticado**
+
+### ✨ **NUEVO FEATURE**
+
+#### 🔐 **Password Change in Session**
+- **Endpoint `/auth/change-password`**: Cambio de contraseña dentro de sesión autenticada
+- **Validaciones de seguridad**:
+  - Verificación de contraseña actual obligatoria
+  - Nueva contraseña debe ser diferente a la actual
+  - Confirmación de nueva contraseña requerida
+  - Mínimo 8 caracteres en nueva contraseña
+- **Autenticación requerida**: Token JWT válido obligatorio
+- **Logging de seguridad**: Registro de cambios exitosos
+- **Manejo robusto de errores**: Mensajes específicos para cada caso
+
+#### 🛠️ **Mejoras Técnicas**
+- **Schema `PasswordChangeRequest`**: Validaciones automáticas con Pydantic
+- **Servicio `change_password()`**: Lógica centralizada con validaciones
+- **Documentación completa**: README y ejemplos de uso actualizados
+- **Scripts de prueba**: Archivo de testing para casos comunes
+
+### 📋 **Validaciones Implementadas**
+```python
+# Casos manejados automáticamente
+- Token JWT inválido → 401 Unauthorized
+- Contraseña actual incorrecta → 400 Bad Request
+- Nueva contraseña igual a actual → 400 Bad Request  
+- Contraseñas no coinciden → 422 Validation Error
+- Contraseña muy corta → 422 Validation Error
+```
+
+### 🔧 **Archivos Modificados**
+- ✅ `schemas.py`: Nuevo `PasswordChangeRequest`
+- ✅ `service.py`: Método `change_password()` 
+- ✅ `router.py`: Endpoint `POST /auth/change-password`
+- ✅ `README.md`: Documentación y ejemplos
+- ✅ `CHANGELOG.md`: Este registro de cambios
+
+### 🎯 **Casos de Uso**
+- **Cambio proactivo**: Usuario quiere cambiar su contraseña
+- **Políticas de seguridad**: Empresas que requieren cambio periódico
+- **Seguridad comprometida**: Cambio rápido sin logout
+- **Mejores prácticas**: Validación de contraseña actual
+
+---
+
 ## 🚀 [1.0.0] - 2024-12-19 - **MVP COMPLETO**
 
 ### ✨ **FEATURES PRINCIPALES**
