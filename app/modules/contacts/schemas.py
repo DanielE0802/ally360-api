@@ -195,18 +195,18 @@ class ContactBase(BaseModel):
         dv = self.dv
         person_type = self.person_type
 
-        # Si es NIT, validar dígito de verificación
+        # Si es NIT, validar solo si se proporciona DV
         if id_type == IdType.NIT:
             if not id_number:
                 raise ValueError('id_number es requerido para tipo NIT')
-            if not dv:
-                raise ValueError('dv (dígito de verificación) es requerido para tipo NIT')
             
-            # Validar DV calculado
-            from app.modules.contacts.models import calculate_nit_dv
-            calculated_dv = calculate_nit_dv(id_number)
-            if calculated_dv != dv:
-                raise ValueError(f'Dígito de verificación incorrecto. Debería ser: {calculated_dv}')
+            # DV es opcional - solo validar si se proporciona
+            if dv:
+                # Validar DV calculado
+                from app.modules.contacts.models import calculate_nit_dv
+                calculated_dv = calculate_nit_dv(id_number)
+                if calculated_dv != dv:
+                    raise ValueError(f'Dígito de verificación incorrecto. Debería ser: {calculated_dv}')
         
         # Si no es NIT, ignorar DV si viene
         elif dv:
@@ -301,13 +301,12 @@ class ContactUpdate(BaseModel):
         dv = self.dv
 
         if id_type == IdType.NIT and id_number is not None:
-            if not dv:
-                raise ValueError('dv es requerido cuando se actualiza a tipo NIT')
-            
-            from app.modules.contacts.models import calculate_nit_dv
-            calculated_dv = calculate_nit_dv(id_number)
-            if calculated_dv != dv:
-                raise ValueError(f'Dígito de verificación incorrecto. Debería ser: {calculated_dv}')
+            # DV es opcional - solo validar si se proporciona
+            if dv:
+                from app.modules.contacts.models import calculate_nit_dv
+                calculated_dv = calculate_nit_dv(id_number)
+                if calculated_dv != dv:
+                    raise ValueError(f'Dígito de verificación incorrecto. Debería ser: {calculated_dv}')
 
         return self
 

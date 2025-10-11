@@ -2,7 +2,7 @@
 Pydantic schemas for subscription management.
 """
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -42,6 +42,14 @@ class PlanBase(BaseModel):
     description: Optional[str] = Field(None, description="Descripción del plan")
     monthly_price: Decimal = Field(default=0, description="Precio mensual")
     yearly_price: Decimal = Field(default=0, description="Precio anual")
+
+    @field_validator('type', mode='before')
+    @classmethod
+    def normalize_plan_type(cls, v):
+        """Normalizar tipo de plan a minúsculas para compatibilidad."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 
 class PlanCreate(PlanBase):
@@ -106,6 +114,14 @@ class PlanOut(PlanBase):
     created_at: datetime
     updated_at: datetime
 
+    @field_validator('type', mode='before')
+    @classmethod
+    def normalize_plan_type(cls, v):
+        """Normalizar tipo de plan a minúsculas para compatibilidad."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
+
     class Config:
         from_attributes = True
 
@@ -119,6 +135,14 @@ class PlanSummary(BaseModel):
     monthly_price: Decimal
     yearly_price: Decimal
     is_popular: bool
+
+    @field_validator('type', mode='before')
+    @classmethod
+    def normalize_plan_type(cls, v):
+        """Normalizar tipo de plan a minúsculas para compatibilidad."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
     class Config:
         from_attributes = True
@@ -217,6 +241,14 @@ class SubscriptionCurrent(BaseModel):
     has_api_access: bool
     has_multi_currency: bool
     has_inventory_alerts: bool
+
+    @field_validator('plan_type', mode='before')
+    @classmethod
+    def normalize_plan_type(cls, v):
+        """Normalizar tipo de plan a minúsculas para compatibilidad."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
     class Config:
         from_attributes = True
