@@ -94,6 +94,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def fix_https_scheme(request, call_next):
+    """Corrige el esquema cuando la app está detrás de Caddy (proxy HTTPS)."""
+    proto = request.headers.get("x-forwarded-proto")
+    if proto:
+        request.scope["scheme"] = proto
+    return await call_next(request)
+
+
 # Include routers
 app.include_router(locations_router)  # Public endpoint - no prefix needed
 app.include_router(subscriptions_router)  # Subscription management
